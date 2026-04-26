@@ -40,13 +40,15 @@ Design notes
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-from typing import Any
+from typing import Any, Iterable, Iterator
 
 import anthropic
 from anthropic import Anthropic
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
@@ -296,4 +298,107 @@ def chat(payload: schemas.ChatRequestIn, db: Session = Depends(get_db)) -> schem
         model=getattr(message, "model", model),
         stop_reason=getattr(message, "stop_reason", None),
         usage=_usage_to_schema(getattr(message, "usage", None) or {}),
+    )
+
+
+# --- Streaming -------------------------------------------------------
+#
+# SSE wire format
+# ---------------
+#
+# All streaming endpoints emit ``text/event-stream`` with three event
+# types, one JSON payload per event:
+#
+#   data: {"type":"text","text":"..."}\n\n
+#   data: {"type":"done","model":"...","usage":{...}}\n\n
+#   data: {"type":"error","detail":"..."}\n\n
+#
+# We don't use named events (``event: ...``) because the data field
+# already carries ``type`` and EventSource-style consumers care little
+# about the wrapper. The frontend's ``apiStream`` helper parses the
+# JSON and dispatches by ``type``.
+
+
+def _sse(payload: dict[str, Any]) -> bytes:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
+
+
+def _stream_completion(
+    client: Anthropic,
+    *,
+    model: str,
+    max_tokens: int,
+    system: list[dict[str, Any]],
+    messages: Iterable[dict[str, Any]],
+) -> Iterator[bytes]:
+    """Drive an Anthropic streaming call and yield SSE-encoded events.
+
+    Catches typed Anthropic exceptions and translates them to a final
+    ``error`` event (callers should NOT raise after the response has
+    started streaming — the HTTP status is already 200).
+    """
+    try:
+        with client.messages.stream(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=list(messages),
+        ) as stream:
+            for token in stream.text_stream:
+                if token:
+                    yield _sse({"type": "text", "text": token})
+            final = stream.get_final_message()
+            yield _sse(
+                {
+                    "type": "done",
+                    "model": getattr(final, "model", model),
+                    "stopReason": getattr(final, "stop_reason", None),
+                    "usage": _usage_to_schema(getattr(final, "usage", None) or {}).model_dump(by_alias=True),
+                }
+            )
+    except anthropic.RateLimitError:
+        yield _sse({"type": "error", "detail": "anthropic_rate_limited"})
+    except anthropic.BadRequestError:
+        yield _sse({"type": "error", "detail": "anthropic_bad_request"})
+    except anthropic.APIError:
+        logger.exception("anthropic stream upstream error")
+        yield _sse({"type": "error", "detail": "anthropic_upstream_error"})
+
+
+@router.post("/stream")
+def chat_stream(payload: schemas.ChatRequestIn, db: Session = Depends(get_db)):
+    if not payload.messages:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="messages_required")
+
+    client = _get_anthropic_client()
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="anthropic_not_configured",
+        )
+
+    system_blocks = _build_system_blocks(
+        db,
+        dept_id=payload.dept_id,
+        skill_id=payload.skill_id,
+        suffix=payload.system_suffix,
+    )
+    api_messages = [{"role": m.role, "content": m.content} for m in payload.messages]
+    model = payload.model or DEFAULT_CHAT_MODEL
+    max_tokens = payload.max_tokens or DEFAULT_MAX_TOKENS
+
+    return StreamingResponse(
+        _stream_completion(
+            client,
+            model=model,
+            max_tokens=max_tokens,
+            system=system_blocks,
+            messages=api_messages,
+        ),
+        media_type="text/event-stream",
+        headers={
+            # Prevent Cloud Run / proxies from buffering the stream.
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
     )

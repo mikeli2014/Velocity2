@@ -308,6 +308,7 @@ input { font-family: inherit; }
 .fade-in { animation: fadeIn 0.25s ease-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+@keyframes blink { 50% { opacity: 0; } }
 
 /* ============ Modal & Forms (CRUD) ============ */
 .modal-overlay {

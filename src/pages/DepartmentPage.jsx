@@ -4,7 +4,7 @@ import { ProjectEditor } from "./OkrPage.jsx";
 import { ProjectDetail } from "../components/ProjectDetail.jsx";
 import { RunDialog } from "../components/RunDialog.jsx";
 import { Departments as SeedDepartments, KnowledgeDomains, SkillPacks, KnowledgeSources, Company, Projects, Objectives, Workflows, DeptActivity } from "../data/seed.js";
-import { useApi, apiPost, ApiError } from "../lib/api.js";
+import { useApi, apiStream, ApiError } from "../lib/api.js";
 
 export function DepartmentPage({ deptId }) {
   // Department record is derived from `deptId`; user edits in the
@@ -678,6 +678,13 @@ function DeptProjects({ dept }) {
   );
 }
 
+function updateAt(arr, i, fn) {
+  if (i < 0 || i >= arr.length) return arr;
+  const cp = arr.slice();
+  cp[i] = fn(cp[i]);
+  return cp;
+}
+
 function AssistantChat({ dept }) {
   const initial = [
     { role: "user", text: "PVD 工艺与喷涂在零冷水热水器外壳上,500台试产成本对比?" },
@@ -695,57 +702,74 @@ function AssistantChat({ dept }) {
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
 
-  // Calls /api/v1/chat with the running transcript. Falls back to a
-  // canned local reply if the backend is unreachable so the demo still
-  // feels alive in fully-offline mode (e.g. someone running the SPA
-  // without the FastAPI service).
-  const send = async () => {
+  // Streams /api/v1/chat/stream with the running transcript. Tokens
+  // append in real-time so a slow Sonnet response feels responsive.
+  // Soft-fails to a canned reply when the backend returns a stable error
+  // slug (e.g. anthropic_not_configured on a preview deploy).
+  const send = () => {
     const text = draft.trim();
     if (!text || pending) return;
     const nextMsgs = [...msgs, { role: "user", text }];
     setMsgs(nextMsgs);
     setDraft("");
     setPending(true);
-    try {
-      const wire = nextMsgs.map(m => ({
-        role: m.role === "assistant" ? "assistant" : "user",
-        content: m.text
-      }));
-      const res = await apiPost("/api/v1/chat", {
-        messages: wire,
-        deptId: dept.id
-      });
-      setMsgs(m => [
-        ...m,
-        {
-          role: "assistant",
-          text: res?.text || "(空响应)",
-          sources: [],
-          skill: dept.assistant ? `${dept.assistant} · Sonnet 4.6` : "Sonnet 4.6",
-          model: res?.model,
-          usage: res?.usage
+
+    // Allocate the assistant message up-front so we can mutate its
+    // .text in place as tokens arrive.
+    const placeholderIdx = nextMsgs.length;
+    setMsgs(m => [
+      ...m,
+      {
+        role: "assistant",
+        text: "",
+        sources: [],
+        skill: dept.assistant ? `${dept.assistant} · Sonnet 4.6` : "Sonnet 4.6",
+        streaming: true
+      }
+    ]);
+
+    const wire = nextMsgs.map(m => ({
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: m.text
+    }));
+
+    let buffered = "";
+    apiStream("/api/v1/chat/stream", { messages: wire, deptId: dept.id }, {
+      onEvent: (ev) => {
+        if (ev.type === "text") {
+          buffered += ev.text;
+          setMsgs(m => updateAt(m, placeholderIdx, x => ({ ...x, text: buffered })));
+        } else if (ev.type === "done") {
+          setMsgs(m => updateAt(m, placeholderIdx, x => ({
+            ...x,
+            streaming: false,
+            model: ev.model,
+            usage: ev.usage
+          })));
+          setPending(false);
+        } else if (ev.type === "error") {
+          setMsgs(m => updateAt(m, placeholderIdx, x => ({
+            ...x,
+            streaming: false,
+            text: ev.detail === "anthropic_not_configured"
+              ? "助手未配置:后台缺少 ANTHROPIC_API_KEY,本回合返回模拟内容。\n\n实际部署中,这里会引用部门知识库并写回项目/OKR。"
+              : `助手暂时不可用(${ev.detail}),稍后重试。`
+          })));
+          setPending(false);
         }
-      ]);
-    } catch (err) {
-      const offline = err instanceof ApiError;
-      const detail = offline ? err.detail : String(err);
-      // Soft-fail: surface a clearly-labelled fallback so the
-      // assistant chat doesn't go silent when ANTHROPIC_API_KEY isn't
-      // configured on a preview deploy.
-      setMsgs(m => [
-        ...m,
-        {
-          role: "assistant",
+      },
+      onError: (err) => {
+        const detail = err instanceof ApiError ? err.detail : String(err);
+        setMsgs(m => updateAt(m, placeholderIdx, x => ({
+          ...x,
+          streaming: false,
           text: detail === "anthropic_not_configured"
             ? "助手未配置:后台缺少 ANTHROPIC_API_KEY,本回合返回模拟内容。\n\n实际部署中,这里会引用部门知识库并写回项目/OKR。"
-            : `助手暂时不可用(${detail || "网络错误"}),稍后重试。`,
-          sources: [],
-          skill: dept.assistant
-        }
-      ]);
-    } finally {
-      setPending(false);
-    }
+            : `助手暂时不可用(${detail || "网络错误"}),稍后重试。`
+        })));
+        setPending(false);
+      }
+    });
   };
 
   function openSource(id) {
@@ -775,6 +799,10 @@ function AssistantChat({ dept }) {
               <div style={{ maxWidth: "80%" }}>
                 <div style={{ background: m.role === "user" ? "var(--vel-indigo)" : "var(--slate-50)", color: m.role === "user" ? "#fff" : "var(--fg1)", padding: "12px 16px", borderRadius: 12, fontSize: 13.5, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
                   {m.text}
+                  {m.streaming && (
+                    <span style={{ display: "inline-block", width: 7, height: 14, background: "var(--vel-indigo)", marginLeft: 4, verticalAlign: "-2px", animation: "blink 1s steps(2,start) infinite" }} />
+                  )}
+                  {m.streaming && !m.text && <span style={{ color: "var(--fg4)", fontSize: 12 }}>思考中…</span>}
                 </div>
                 {((m.sourceIds && m.sourceIds.length) || (m.sources && m.sources.length)) > 0 && (
                   <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>

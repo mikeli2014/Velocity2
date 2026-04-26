@@ -83,3 +83,82 @@ export function useApi(path, opts = {}) {
 export const apiPost   = (path, body) => apiFetch(path, { method: "POST", body });
 export const apiPatch  = (path, body) => apiFetch(path, { method: "PATCH", body });
 export const apiDelete = (path)       => apiFetch(path, { method: "DELETE" });
+
+/** POST a body and consume an SSE stream. The backend wire format is one
+ *  JSON object per `data: …\n\n` line, with the object's `type` field
+ *  driving dispatch. Known types from `routes/chat.py`:
+ *
+ *    {type:"text",   text}              streaming token
+ *    {type:"counts", pro, con, concern} synthesis-only stance counts
+ *    {type:"done",   model, usage, stopReason}
+ *    {type:"error",  detail}            stable slug; final event
+ *
+ *  Returns the AbortController so callers can cancel mid-stream (e.g.
+ *  unmount). On non-2xx responses, calls onError with an ApiError. */
+export function apiStream(path, body, { onEvent, onError, signal } = {}) {
+  const ctrl = new AbortController();
+  const composedSignal = signal
+    ? combineSignals(signal, ctrl.signal)
+    : ctrl.signal;
+
+  (async () => {
+    let res;
+    try {
+      res = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        body: JSON.stringify(body || {}),
+        signal: composedSignal
+      });
+    } catch (err) {
+      if (err?.name !== "AbortError") onError?.(err);
+      return;
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      const data = text ? safeJson(text) : null;
+      const detail = (data && (data.detail || data.message)) || res.statusText;
+      onError?.(new ApiError(`POST ${path} → ${res.status} ${detail}`, {
+        status: res.status, detail, path
+      }));
+      return;
+    }
+    const reader = res.body?.getReader();
+    if (!reader) { onError?.(new Error("no_response_body")); return; }
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // SSE event delimiter is a blank line.
+        let idx;
+        while ((idx = buffer.indexOf("\n\n")) >= 0) {
+          const raw = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          const line = raw.startsWith("data: ") ? raw.slice(6) : raw.replace(/^data:\s*/, "");
+          if (!line.trim()) continue;
+          const event = safeJson(line);
+          if (event) onEvent?.(event);
+        }
+      }
+    } catch (err) {
+      if (err?.name !== "AbortError") onError?.(err);
+    }
+  })();
+
+  return ctrl;
+}
+
+function combineSignals(a, b) {
+  if (typeof AbortSignal !== "undefined" && AbortSignal.any) {
+    return AbortSignal.any([a, b]);
+  }
+  // Fallback for older runtimes (Vitest under some versions).
+  const ctrl = new AbortController();
+  const onAbort = () => ctrl.abort();
+  a.addEventListener("abort", onAbort);
+  b.addEventListener("abort", onAbort);
+  return ctrl.signal;
+}

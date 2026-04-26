@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Icon, Modal, makeId } from "../components/primitives.jsx";
 import { StrategyQuestion, StrategyQuestions, STRATEGY_STATUSES, Agents, DebateMessages as SeedDebateMessages, KnowledgeSources, Objectives } from "../data/seed.js";
-import { useApi, apiPost, ApiError } from "../lib/api.js";
+import { useApi, apiPost, apiStream, ApiError } from "../lib/api.js";
 
 export function StrategyPage() {
   const [tab, setTab] = useState("canvas");
@@ -560,18 +560,34 @@ function WarCouncil({ questionId }) {
     }
   }
 
-  async function runSynthesis() {
+  function runSynthesis() {
     if (synthLoading) return;
     setSynthLoading(true);
     setError(null);
-    try {
-      const res = await apiPost(`/api/v1/strategy-questions/${questionId}/debate/synthesis`, {});
-      setSynth(res);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.detail : String(err));
-    } finally {
-      setSynthLoading(false);
-    }
+    setSynth({ text: "", pro: 0, con: 0, concern: 0, model: "claude-sonnet-4-6", streaming: true });
+    let buffered = "";
+    apiStream(`/api/v1/strategy-questions/${questionId}/debate/synthesis/stream`, {}, {
+      onEvent: (ev) => {
+        if (ev.type === "counts") {
+          setSynth(s => ({ ...s, pro: ev.pro, con: ev.con, concern: ev.concern }));
+        } else if (ev.type === "text") {
+          buffered += ev.text;
+          setSynth(s => ({ ...s, text: buffered }));
+        } else if (ev.type === "done") {
+          setSynth(s => ({ ...s, model: ev.model, streaming: false }));
+          setSynthLoading(false);
+        } else if (ev.type === "error") {
+          setError(ev.detail);
+          setSynth(null);
+          setSynthLoading(false);
+        }
+      },
+      onError: (err) => {
+        setError(err instanceof ApiError ? err.detail : String(err));
+        setSynth(null);
+        setSynthLoading(false);
+      }
+    });
   }
 
   // Default synthesis when the live one hasn't been generated yet — keeps
@@ -673,6 +689,10 @@ function WarCouncil({ questionId }) {
           </div>
           <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
             {display.text}
+            {display.streaming && (
+              <span style={{ display: "inline-block", width: 7, height: 13, background: "#c4b5fd", marginLeft: 4, verticalAlign: "-2px", animation: "blink 1s steps(2,start) infinite" }} />
+            )}
+            {display.streaming && !display.text && <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 12 }}>生成中…</span>}
           </div>
         </div>
       </div>

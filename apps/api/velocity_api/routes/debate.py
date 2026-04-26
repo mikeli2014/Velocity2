@@ -278,15 +278,15 @@ def run_debate_round(
     return schemas.DebateRoundOut(round=round_no, messages=[_to_out(r) for r in new_rows])
 
 
-@router.post("/{question_id}/debate/synthesis", response_model=schemas.DebateSynthesisOut)
-def debate_synthesis(question_id: str, db: Session = Depends(get_db)):
+def _build_synthesis_prompt(db: Session, question_id: str) -> tuple[list[dict[str, Any]], str, int, int, int]:
+    """Shared prompt assembly for synchronous + streaming synthesis.
+
+    Returns ``(system_blocks, user_msg, pro, con, concern)``. Raises
+    ``HTTPException`` for the same failure modes both endpoints share.
+    """
     question = db.get(models.StrategyQuestion, question_id)
     if question is None:
         raise HTTPException(status_code=404, detail="question_not_found")
-
-    client = chat_module._get_anthropic_client()
-    if client is None:
-        raise HTTPException(status_code=503, detail="anthropic_not_configured")
 
     rows = (
         db.query(models.DebateMessage)
@@ -325,6 +325,16 @@ def debate_synthesis(question_id: str, db: Session = Depends(get_db)):
         f"问题:{question.title}\n\n研讨记录:\n{transcript}\n\n"
         f"统计:赞成 {pro} 人,反对 {con} 人,保留 {concern} 人。请生成研讨摘要。"
     )
+    return system_blocks, user_msg, pro, con, concern
+
+
+@router.post("/{question_id}/debate/synthesis", response_model=schemas.DebateSynthesisOut)
+def debate_synthesis(question_id: str, db: Session = Depends(get_db)):
+    client = chat_module._get_anthropic_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="anthropic_not_configured")
+
+    system_blocks, user_msg, pro, con, concern = _build_synthesis_prompt(db, question_id)
 
     try:
         message = client.messages.create(
@@ -347,4 +357,42 @@ def debate_synthesis(question_id: str, db: Session = Depends(get_db)):
         con=con,
         concern=concern,
         model=getattr(message, "model", DEFAULT_CHAT_MODEL),
+    )
+
+
+@router.post("/{question_id}/debate/synthesis/stream")
+def debate_synthesis_stream(question_id: str, db: Session = Depends(get_db)):
+    """SSE variant of debate synthesis. Same prompt, same prefix-cached
+    system blocks; chunks the model output to the client as they arrive
+    so the WarCouncil摘要面板 doesn't sit on a 5-10s "loading" state."""
+    from fastapi.responses import StreamingResponse  # local import — only this route streams
+
+    client = chat_module._get_anthropic_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="anthropic_not_configured")
+
+    system_blocks, user_msg, pro, con, concern = _build_synthesis_prompt(db, question_id)
+
+    def _wrapped() -> Any:
+        # Re-use chat's _stream_completion for the SSE encoding + error
+        # translation, then prepend a stance-counts event so the
+        # frontend can populate the pill before the first text token.
+        yield chat_module._sse(
+            {"type": "counts", "pro": pro, "con": con, "concern": concern}
+        )
+        yield from chat_module._stream_completion(
+            client,
+            model=DEFAULT_CHAT_MODEL,
+            max_tokens=SYNTHESIS_MAX_TOKENS,
+            system=system_blocks,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+
+    return StreamingResponse(
+        _wrapped(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
     )
