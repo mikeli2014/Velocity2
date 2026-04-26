@@ -7,7 +7,15 @@ export function KnowledgePage() {
   const [filter, setFilter] = useState("all");
   const [viewing, setViewing] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [ingestItems, setIngestItems] = useState(() => IngestQueueItems.map(it => ({ ...it })));
   const sources = filter === "all" ? KnowledgeSources : KnowledgeSources.filter(s => s.scope.includes(filter));
+
+  function pushIngestItem(it) {
+    setIngestItems(prev => [it, ...prev]);
+  }
+  function patchIngestItem(id, patch) {
+    setIngestItems(prev => prev.map(it => it.id === id ? { ...it, ...patch } : it));
+  }
 
   return (
     <div className="content fade-in">
@@ -124,11 +132,22 @@ export function KnowledgePage() {
       )}
 
       {tab === "graph" && <KnowledgeGraph />}
-      {tab === "ingest" && <IngestQueue />}
+      {tab === "ingest" && (
+        <IngestQueue
+          items={ingestItems}
+          onPatch={patchIngestItem}
+        />
+      )}
       {tab === "feedback" && <FeedbackPanel />}
 
       {viewing && <KnowledgeSourceDetail source={viewing} onClose={() => setViewing(null)} />}
-      {uploading && <KnowledgeUploadFlow mode={uploading.mode} onClose={() => setUploading(false)} />}
+      {uploading && (
+        <KnowledgeUploadFlow
+          mode={uploading.mode}
+          onClose={() => setUploading(false)}
+          onComplete={(item) => { pushIngestItem(item); setTab("ingest"); }}
+        />
+      )}
     </div>
   );
 }
@@ -252,7 +271,7 @@ const UPLOAD_STAGES = [
   { id: "review",   label: "待审核", desc: "进入人工审核或自动通过" }
 ];
 
-function KnowledgeUploadFlow({ mode, onClose }) {
+function KnowledgeUploadFlow({ mode, onClose, onComplete }) {
   const [stage, setStage] = useState(0);
   const [title, setTitle] = useState(mode === "url" ? "https://" : "");
   const [scope, setScope] = useState("公司");
@@ -268,7 +287,34 @@ function KnowledgeUploadFlow({ mode, onClose }) {
       i += 1;
       setStage(i);
       if (i < UPLOAD_STAGES.length) setTimeout(tick, 700);
-      else setRunning(false);
+      else {
+        setRunning(false);
+        if (onComplete) {
+          const detectedDomain = KnowledgeDomains.find(d => d.id === domain);
+          // Detect type from filename extension or url
+          const lower = title.toLowerCase();
+          const t = mode === "url" ? "URL"
+            : lower.endsWith(".pdf") ? "PDF"
+            : lower.endsWith(".docx") || lower.endsWith(".doc") ? "DOC"
+            : lower.endsWith(".xlsx") || lower.endsWith(".xls") ? "XLSX"
+            : lower.endsWith(".pptx") || lower.endsWith(".ppt") ? "PPT"
+            : lower.endsWith(".txt") || lower.endsWith(".md") ? "TXT"
+            : "FILE";
+          onComplete({
+            id: `iq-${Date.now().toString(36)}`,
+            name: title.trim() || "(未命名)",
+            type: t,
+            size: "—",
+            state: "review",
+            progress: 100,
+            scope,
+            owner: "当前用户",
+            uploaded: "刚刚",
+            error: null,
+            domain: detectedDomain?.name
+          });
+        }
+      }
     };
     setTimeout(tick, 700);
   }
@@ -425,11 +471,9 @@ function KnowledgeGraph() {
   );
 }
 
-function IngestQueue() {
-  const [items, setItems] = useState(() => IngestQueueItems.map(it => ({ ...it })));
+function IngestQueue({ items, onPatch }) {
   const [filter, setFilter] = useState("all");
-
-  function update(id, patch) { setItems(list => list.map(it => it.id === id ? { ...it, ...patch } : it)); }
+  const update = onPatch;
 
   function approve(id) { update(id, { state: "approved", progress: 100 }); }
   function reject(id)  { update(id, { state: "rejected" }); }

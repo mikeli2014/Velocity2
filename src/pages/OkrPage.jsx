@@ -492,53 +492,114 @@ function ObjectiveEditor({ objective: o, onChange, onClose, onSave }) {
 }
 
 function ProjectsTable({ projects, onView, onEdit, onDelete, onNew }) {
+  const [search, setSearch] = useState("");
+  const [filterHealth, setFilterHealth] = useState("all");
+  const [filterOkr, setFilterOkr] = useState("all");
+  const [filterDept, setFilterDept] = useState("all");
+
+  const okrCodes = Array.from(new Set(projects.map(p => p.okr).filter(Boolean)));
+  const deptNames = Array.from(new Set(projects.map(p => p.dept).filter(Boolean)));
+
+  const filtered = projects.filter(p => {
+    if (filterHealth !== "all" && p.health !== filterHealth) return false;
+    if (filterOkr !== "all" && p.okr !== filterOkr) return false;
+    if (filterDept !== "all" && p.dept !== filterDept) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      return (p.name || "").toLowerCase().includes(q)
+        || (p.owner || "").toLowerCase().includes(q)
+        || (p.milestone || "").toLowerCase().includes(q)
+        || (p.dept || "").toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  const reset = () => { setSearch(""); setFilterHealth("all"); setFilterOkr("all"); setFilterDept("all"); };
+  const isFiltered = search.trim() || filterHealth !== "all" || filterOkr !== "all" || filterDept !== "all";
+
   return (
-    <div className="card">
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-        <thead style={{ background: "var(--slate-50)" }}>
-          <tr style={{ textAlign: "left" }}>
-            {["健康", "项目", "OKR", "负责人", "部门", "里程碑", "进度", "风险", "截止", ""].map((h, i) => (
-              <th key={i} style={{ padding: "10px 14px", fontWeight: 600, fontSize: 11, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: "1px solid var(--border-soft)" }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {projects.map(p => (
-            <tr key={p.id} style={{ borderBottom: "1px solid var(--border-soft)" }}>
-              <td style={{ padding: "12px 14px" }}><span className={`dot dot--${p.health}`} /></td>
-              <td style={{ padding: "12px 14px", fontWeight: 600, color: "var(--fg1)" }}>
-                <a onClick={() => onView && onView(p)} style={{ cursor: "pointer", color: "var(--fg1)" }} title="查看项目详情">{p.name}</a>
-              </td>
-              <td style={{ padding: "12px 14px" }}><span className="pill pill--indigo num">{p.okr}</span></td>
-              <td style={{ padding: "12px 14px", color: "var(--fg2)" }}>{p.owner}</td>
-              <td style={{ padding: "12px 14px", color: "var(--fg2)" }}>{p.dept}</td>
-              <td style={{ padding: "12px 14px", color: "var(--fg2)" }}>{p.milestone}</td>
-              <td style={{ padding: "12px 14px", width: 160 }}>
-                <div className="row" style={{ gap: 8 }}>
-                  <div style={{ flex: 1 }}><Progress value={p.progress} status={p.health} /></div>
-                  <span className="num" style={{ fontSize: 11, color: "var(--fg2)", width: 28 }}>{p.progress}%</span>
-                </div>
-              </td>
-              <td style={{ padding: "12px 14px" }}>
-                {p.risks > 0 ? <span className={`pill ${p.risks > 3 ? 'pill--danger' : 'pill--warn'}`}>⚠ {p.risks}</span> : <span style={{ color: "var(--fg4)", fontSize: 11 }}>—</span>}
-              </td>
-              <td style={{ padding: "12px 14px", color: "var(--fg3)", fontSize: 12, fontFamily: "var(--font-mono)" }}>{p.due}</td>
-              <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
-                <div className="row-actions">
-                  <button className="icon-btn" title="详情" onClick={() => onView && onView(p)}><Icon.Eye size={14} /></button>
-                  <button className="icon-btn" title="编辑" onClick={() => onEdit(p)}><Icon.Edit size={14} /></button>
-                  <button className="icon-btn icon-btn--danger" title="删除" onClick={() => onDelete(p)}><Icon.Trash size={14} /></button>
-                </div>
-              </td>
-            </tr>
-          ))}
-          {projects.length === 0 && (
-            <tr><td colSpan={10} style={{ padding: 40, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>
-              暂无关键项目 — <a onClick={onNew} style={{ color: "var(--vel-indigo)", cursor: "pointer", textDecoration: "underline" }}>新增一个</a>
-            </td></tr>
+    <div>
+      <div className="row" style={{ marginBottom: 14, justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          <div className="topbar__search" style={{ width: 220, marginLeft: 0 }}>
+            <Icon.Search size={13} />
+            <input placeholder="搜索项目 / 负责人 / 里程碑…" value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <select className="select" style={{ width: 110 }} value={filterHealth} onChange={e => setFilterHealth(e.target.value)}>
+            <option value="all">全部健康</option>
+            <option value="ok">健康</option>
+            <option value="warn">关注</option>
+            <option value="danger">告警</option>
+          </select>
+          <select className="select" style={{ width: 130 }} value={filterOkr} onChange={e => setFilterOkr(e.target.value)}>
+            <option value="all">全部 OKR</option>
+            {okrCodes.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select className="select" style={{ width: 180 }} value={filterDept} onChange={e => setFilterDept(e.target.value)}>
+            <option value="all">全部部门</option>
+            {deptNames.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+          {isFiltered && (
+            <button className="btn btn--text btn--sm" onClick={reset}><Icon.X size={11} /> 清除筛选</button>
           )}
-        </tbody>
-      </table>
+        </div>
+        <div className="row" style={{ gap: 12, fontSize: 11, color: "var(--fg3)" }}>
+          <span>显示 <strong className="num" style={{ color: "var(--fg1)" }}>{filtered.length}</strong> / {projects.length} 个项目</span>
+        </div>
+      </div>
+
+      <div className="card">
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead style={{ background: "var(--slate-50)" }}>
+            <tr style={{ textAlign: "left" }}>
+              {["健康", "项目", "OKR", "负责人", "部门", "里程碑", "进度", "风险", "截止", ""].map((h, i) => (
+                <th key={i} style={{ padding: "10px 14px", fontWeight: 600, fontSize: 11, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: "1px solid var(--border-soft)" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(p => (
+              <tr key={p.id} style={{ borderBottom: "1px solid var(--border-soft)" }}>
+                <td style={{ padding: "12px 14px" }}><span className={`dot dot--${p.health}`} /></td>
+                <td style={{ padding: "12px 14px", fontWeight: 600, color: "var(--fg1)" }}>
+                  <a onClick={() => onView && onView(p)} style={{ cursor: "pointer", color: "var(--fg1)" }} title="查看项目详情">{p.name}</a>
+                </td>
+                <td style={{ padding: "12px 14px" }}><span className="pill pill--indigo num">{p.okr}</span></td>
+                <td style={{ padding: "12px 14px", color: "var(--fg2)" }}>{p.owner}</td>
+                <td style={{ padding: "12px 14px", color: "var(--fg2)" }}>{p.dept}</td>
+                <td style={{ padding: "12px 14px", color: "var(--fg2)" }}>{p.milestone}</td>
+                <td style={{ padding: "12px 14px", width: 160 }}>
+                  <div className="row" style={{ gap: 8 }}>
+                    <div style={{ flex: 1 }}><Progress value={p.progress} status={p.health} /></div>
+                    <span className="num" style={{ fontSize: 11, color: "var(--fg2)", width: 28 }}>{p.progress}%</span>
+                  </div>
+                </td>
+                <td style={{ padding: "12px 14px" }}>
+                  {p.risks > 0 ? <span className={`pill ${p.risks > 3 ? 'pill--danger' : 'pill--warn'}`}>⚠ {p.risks}</span> : <span style={{ color: "var(--fg4)", fontSize: 11 }}>—</span>}
+                </td>
+                <td style={{ padding: "12px 14px", color: "var(--fg3)", fontSize: 12, fontFamily: "var(--font-mono)" }}>{p.due}</td>
+                <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+                  <div className="row-actions">
+                    <button className="icon-btn" title="详情" onClick={() => onView && onView(p)}><Icon.Eye size={14} /></button>
+                    <button className="icon-btn" title="编辑" onClick={() => onEdit(p)}><Icon.Edit size={14} /></button>
+                    <button className="icon-btn icon-btn--danger" title="删除" onClick={() => onDelete(p)}><Icon.Trash size={14} /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {filtered.length === 0 && projects.length > 0 && (
+              <tr><td colSpan={10} style={{ padding: 40, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>
+                没有匹配的项目 — <a onClick={reset} style={{ color: "var(--vel-indigo)", cursor: "pointer", textDecoration: "underline" }}>清除筛选</a>
+              </td></tr>
+            )}
+            {projects.length === 0 && (
+              <tr><td colSpan={10} style={{ padding: 40, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>
+                暂无关键项目 — <a onClick={onNew} style={{ color: "var(--vel-indigo)", cursor: "pointer", textDecoration: "underline" }}>新增一个</a>
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
