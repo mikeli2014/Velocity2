@@ -212,6 +212,42 @@ class KnowledgeOverviewOut(_CamelModel):
     recent_sources: list[KnowledgeSourceOut]
 
 
+# --- Activity / Agents / Strategy Questions -----------------------------
+
+
+class ActivityOut(_CamelModel):
+    id: str
+    who: str | None = None
+    what: str | None = None
+    target: str | None = None
+    when: str | None = None
+    type: str | None = None
+
+
+class AgentOut(_CamelModel):
+    id: str
+    name: str
+    role: str | None = None
+    color: str | None = None
+    icon: str | None = None
+    focus: str | None = None
+
+
+class StrategyQuestionOut(_CamelModel):
+    id: str
+    title: str
+    asker: str | None = None
+    asked: str | None = None
+    status: str | None = None
+    summary: str | None = None
+    rounds: int = 0
+    options_count: int = 0
+    decision_id: str | None = None
+    context: list[str] = Field(default_factory=list)
+    okrs: list[str] = Field(default_factory=list)
+    agents: list[str] = Field(default_factory=list)
+
+
 # --- Health ------------------------------------------------------------
 
 

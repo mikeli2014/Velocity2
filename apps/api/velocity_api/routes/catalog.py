@@ -8,7 +8,7 @@ matching the objectives.py shape.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
@@ -63,3 +63,43 @@ def get_knowledge_source(source_id: str, db: Session = Depends(get_db)):
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="source_not_found")
     return schemas.KnowledgeSourceOut.model_validate(row)
+
+
+# --- Activity / Agents / Strategy Questions -----------------------------
+
+
+@router.get("/activity", response_model=list[schemas.ActivityOut])
+def list_activity(
+    limit: int = Query(default=50, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """Home page activity feed. Phase 1 returns the seeded sample; Phase 2
+    will write entries from audit triggers."""
+    rows = db.query(models.Activity).limit(limit).all()
+    return [schemas.ActivityOut.model_validate(r) for r in rows]
+
+
+@router.get("/agents", response_model=list[schemas.AgentOut])
+def list_agents(db: Session = Depends(get_db)):
+    rows = db.query(models.Agent).order_by(models.Agent.id).all()
+    return [schemas.AgentOut.model_validate(r) for r in rows]
+
+
+@router.get("/strategy-questions", response_model=list[schemas.StrategyQuestionOut])
+def list_strategy_questions(
+    status: str | None = Query(default=None, description="filter by status"),
+    db: Session = Depends(get_db),
+):
+    q = db.query(models.StrategyQuestion)
+    if status:
+        q = q.filter(models.StrategyQuestion.status == status)
+    rows = q.order_by(models.StrategyQuestion.asked.desc()).all()
+    return [schemas.StrategyQuestionOut.model_validate(r) for r in rows]
+
+
+@router.get("/strategy-questions/{question_id}", response_model=schemas.StrategyQuestionOut)
+def get_strategy_question(question_id: str, db: Session = Depends(get_db)):
+    row = db.get(models.StrategyQuestion, question_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="question_not_found")
+    return schemas.StrategyQuestionOut.model_validate(row)

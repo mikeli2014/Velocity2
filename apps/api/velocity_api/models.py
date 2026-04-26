@@ -211,3 +211,55 @@ class KnowledgeSource(Base):
     embeddings: Mapped[int | None] = mapped_column(nullable=True)
     linked_projects: Mapped[list[str]] = mapped_column(JSON, default=list)
     linked_decisions: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+
+# --- Activity / Agents / Strategy Questions ----------------------------
+
+
+class Activity(Base):
+    """Home page activity feed. Phase 1: append-only read model from seed;
+    Phase 2 will write entries here from audit triggers."""
+
+    __tablename__ = "activity"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    who: Mapped[str | None] = mapped_column(String, nullable=True)
+    what: Mapped[str | None] = mapped_column(String, nullable=True)
+    target: Mapped[str | None] = mapped_column(String, nullable=True)
+    when: Mapped[str | None] = mapped_column(String, nullable=True)
+    type: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class Agent(Base):
+    """Strategy debate persona. Static catalog the strategy canvas pulls
+    from when assembling a War Council session."""
+
+    __tablename__ = "agents"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    role: Mapped[str | None] = mapped_column(String, nullable=True)
+    color: Mapped[str | None] = mapped_column(String, nullable=True)
+    icon: Mapped[str | None] = mapped_column(String, nullable=True)
+    focus: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class StrategyQuestion(Base):
+    """Question registry that drives the Strategy Studio. Each question
+    holds context source IDs, OKR codes, and participating agent IDs.
+    Debate messages live elsewhere (Phase 2 — multi-agent debate)."""
+
+    __tablename__ = "strategy_questions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    title: Mapped[str] = mapped_column(String)
+    asker: Mapped[str | None] = mapped_column(String, nullable=True)
+    asked: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str | None] = mapped_column(String, nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rounds: Mapped[int] = mapped_column(default=0)
+    options_count: Mapped[int] = mapped_column(default=0)
+    decision_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    context: Mapped[list[str]] = mapped_column(JSON, default=list)   # source IDs
+    okrs: Mapped[list[str]] = mapped_column(JSON, default=list)       # objective codes
+    agents: Mapped[list[str]] = mapped_column(JSON, default=list)     # agent IDs

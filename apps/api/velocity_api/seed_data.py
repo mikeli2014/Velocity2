@@ -400,6 +400,96 @@ KNOWLEDGE_SOURCES: list[dict[str, Any]] = [
 ]
 
 
+# --- Activity (Home feed) ------------------------------------------------
+
+ACTIVITY: list[dict[str, Any]] = [
+    {"id": "ac-1", "who": "李慕白",     "what": "更新了关键项目",            "target": "全屋净水 2.0 — 局改方案产品化", "when": "12 分钟前", "type": "project"},
+    {"id": "ac-2", "who": "小龙虾助手", "what": "回答了 8 个工业设计部检索请求", "target": "今日",                          "when": "1 小时前",   "type": "assistant"},
+    {"id": "ac-3", "who": "周岚",       "what": "新增风险到",                "target": "BP/SC/SA 三角协同 200 城落地",  "when": "2 小时前",   "type": "risk"},
+    {"id": "ac-4", "who": "战略画布",   "what": "完成了第 3 轮多智能体研讨", "target": "FY26 是否加大线上 DTC 渠道投入?", "when": "今早 09:24","type": "strategy"},
+    {"id": "ac-5", "who": "苏婉",       "what": "上传了 38 条 CMF 知识条目", "target": "CMF 知识域",                    "when": "今早 08:50","type": "knowledge"},
+    {"id": "ac-6", "who": "陈志远",     "what": "查看了",                    "target": "FY26 公司级 OKR 执行健康度",    "when": "昨天 22:11", "type": "view"},
+]
+
+# --- Agents (strategy debate personas) -----------------------------------
+
+AGENTS: list[dict[str, Any]] = [
+    {"id": "ag-finance", "name": "财务视角",     "role": "Finance Strategist", "color": "#f59e0b", "icon": "Coins",      "focus": "ROI / 现金流 / 投入产出比"},
+    {"id": "ag-product", "name": "产品视角",     "role": "Product Lead",       "color": "#4F46E5", "icon": "Package",    "focus": "用户价值 / 品类机会 / 路线图"},
+    {"id": "ag-gtm",     "name": "GTM 视角",     "role": "Go-to-Market",       "color": "#EC4899", "icon": "Megaphone",  "focus": "渠道 / 节奏 / 竞争反应"},
+    {"id": "ag-ops",     "name": "运营视角",     "role": "Operations",         "color": "#10B981", "icon": "Activity",   "focus": "执行节奏 / 资源 / 流程"},
+    {"id": "ag-risk",    "name": "风险视角",     "role": "Risk & Compliance",  "color": "#EF4444", "icon": "Shield",     "focus": "合规 / 安全 / 反对意见"},
+    {"id": "ag-tech",    "name": "技术视角",     "role": "Engineering",        "color": "#0EA5E9", "icon": "Cpu",        "focus": "可行性 / 架构 / 投入"},
+    {"id": "ag-supply",  "name": "供应链视角",   "role": "Supply Chain",       "color": "#6366F1", "icon": "Truck",      "focus": "产能 / 库存 / 供应商"},
+    {"id": "ag-org",     "name": "组织视角",     "role": "Org & Talent",       "color": "#7C3AED", "icon": "Users",      "focus": "组织 / 人才 / 文化"},
+]
+
+# --- Strategy Questions ---------------------------------------------------
+
+STRATEGY_QUESTIONS: list[dict[str, Any]] = [
+    {
+        "id": "sq-1",
+        "title": "FY26 是否加大线上 DTC 渠道投入?",
+        "asker": "陈志远 · CEO",
+        "asked": "2026-04-23",
+        "status": "in-debate",
+        "summary": "线上 DTC 是否能成为全屋净水套系的主力增长引擎,以及对线下渠道的冲击如何控制。",
+        "rounds": 3, "options_count": 3, "decision_id": None,
+        "context": ["ks-1", "ks-3", "ks-4"],
+        "okrs": ["O1", "O2"],
+        "agents": ["ag-finance", "ag-product", "ag-gtm", "ag-ops", "ag-risk", "ag-supply", "ag-org"],
+    },
+    {
+        "id": "sq-2",
+        "title": "FY26 H2 是否进入欧洲市场首发新风净化机?",
+        "asker": "Renee · 海外事业部",
+        "asked": "2026-04-12",
+        "status": "in-debate",
+        "summary": "G3 新风净化机在欧洲首发,需评估 CE 认证节奏、北欧市场壁垒以及与现有海外合作渠道的协同。",
+        "rounds": 2, "options_count": 2, "decision_id": None,
+        "context": ["ks-1", "ks-7"],
+        "okrs": ["O1"],
+        "agents": ["ag-product", "ag-gtm", "ag-finance", "ag-supply", "ag-risk"],
+    },
+    {
+        "id": "sq-3",
+        "title": "县域服务网络由 BP 主导改为 SC 主导是否提升履约?",
+        "asker": "周岚 · COP VP",
+        "asked": "2026-03-18",
+        "status": "decided",
+        "summary": "已完成 3 轮研讨与 2 城试点,数据显示 SC 主导能把响应时长从 38h 降至 14h。",
+        "rounds": 3, "options_count": 2, "decision_id": "d-2",
+        "context": ["ks-3", "ks-6"],
+        "okrs": ["O2"],
+        "agents": ["ag-ops", "ag-risk", "ag-org", "ag-product", "ag-gtm"],
+    },
+    {
+        "id": "sq-4",
+        "title": "Velocity 部门助手是否优先工业设计部全员上线?",
+        "asker": "黄毅 · CTO",
+        "asked": "2026-03-04",
+        "status": "decided",
+        "summary": "工业设计部需求最强且数据基础最好,先在该部门全员上线,作为后续部门的样板。",
+        "rounds": 2, "options_count": 3, "decision_id": "d-3",
+        "context": ["ks-7"],
+        "okrs": ["O4"],
+        "agents": ["ag-product", "ag-tech", "ag-org", "ag-risk"],
+    },
+    {
+        "id": "sq-5",
+        "title": "FY27 是否把 9 大品类 CMF 中台对外开放给经销商?",
+        "asker": "苏婉 · 设计总监",
+        "asked": "2026-04-25",
+        "status": "draft",
+        "summary": "想法初稿:CMF 中台可以变成对内 + 对经销商的共享设计资产,但需评估知识产权与商业模式。",
+        "rounds": 0, "options_count": 0, "decision_id": None,
+        "context": ["ks-5"],
+        "okrs": ["O3"],
+        "agents": [],
+    },
+]
+
+
 # --- Loader --------------------------------------------------------------
 
 
@@ -412,7 +502,8 @@ def load_seed(db) -> dict[str, int]:
     from . import models  # local import to avoid circular at module load
 
     inserted = {"company": 0, "departments": 0, "objectives": 0, "key_results": 0,
-                "projects": 0, "decisions": 0, "knowledge_domains": 0, "knowledge_sources": 0}
+                "projects": 0, "decisions": 0, "knowledge_domains": 0, "knowledge_sources": 0,
+                "activity": 0, "agents": 0, "strategy_questions": 0}
 
     if db.get(models.Company, COMPANY["id"]) is None:
         db.add(models.Company(**COMPANY))
@@ -454,6 +545,21 @@ def load_seed(db) -> dict[str, int]:
         if db.get(models.KnowledgeSource, ks["id"]) is None:
             db.add(models.KnowledgeSource(**ks))
             inserted["knowledge_sources"] += 1
+
+    for a in ACTIVITY:
+        if db.get(models.Activity, a["id"]) is None:
+            db.add(models.Activity(**a))
+            inserted["activity"] += 1
+
+    for ag in AGENTS:
+        if db.get(models.Agent, ag["id"]) is None:
+            db.add(models.Agent(**ag))
+            inserted["agents"] += 1
+
+    for sq in STRATEGY_QUESTIONS:
+        if db.get(models.StrategyQuestion, sq["id"]) is None:
+            db.add(models.StrategyQuestion(**sq))
+            inserted["strategy_questions"] += 1
 
     db.commit()
     return inserted

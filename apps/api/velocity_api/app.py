@@ -39,15 +39,19 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Create tables, then seed the DB if it looks empty."""
+    """Create tables, then top up the DB with any seed rows it's missing.
+
+    `load_seed` is idempotent (per-row `db.get` checks) so it's safe to
+    run on every startup — and that means newly added seed entities
+    auto-populate without manually wiping ``.data/velocity.db``.
+    """
     create_all()
     if settings.auto_seed:
         with SessionLocal() as db:
-            if seed_data.is_db_empty(db):
-                inserted = seed_data.load_seed(db)
-                total = sum(inserted.values())
-                if total:
-                    print(f"[velocity-api] seeded {total} rows: {inserted}")
+            inserted = seed_data.load_seed(db)
+            total = sum(inserted.values())
+            if total:
+                print(f"[velocity-api] seeded {total} rows: {inserted}")
     yield
 
 

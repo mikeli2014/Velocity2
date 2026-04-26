@@ -1,6 +1,15 @@
 import React from "react";
 import { Icon, KpiCard, Progress, HealthPill } from "../components/primitives.jsx";
-import { Company, Objectives, Projects, Activity, Departments, StrategyQuestion, Agents } from "../data/seed.js";
+import {
+  Company,
+  Objectives as SeedObjectives,
+  Projects as SeedProjects,
+  Activity as SeedActivity,
+  Departments as SeedDepartments,
+  StrategyQuestion as SeedStrategyQuestion,
+  Agents as SeedAgents
+} from "../data/seed.js";
+import { useApi } from "../lib/api.js";
 
 function activityRoute(a) {
   switch (a.type) {
@@ -15,6 +24,18 @@ function activityRoute(a) {
 }
 
 export function HomePage({ setRoute }) {
+  // All read-only — Home is a dashboard. Each useApi falls back to the
+  // bundled seed when the endpoint isn't reachable.
+  const Objectives    = useApi("/api/v1/objectives").data        ?? SeedObjectives;
+  const Projects      = useApi("/api/v1/projects").data          ?? SeedProjects;
+  const Activity      = useApi("/api/v1/activity").data          ?? SeedActivity;
+  const Departments   = useApi("/api/v1/departments").data       ?? SeedDepartments;
+  const Agents        = useApi("/api/v1/agents").data            ?? SeedAgents;
+  // The "strategy debate teaser" wants a single in-debate question. Pick
+  // the first in-debate row from the registry, falling back to the seeded
+  // singular if nothing matches.
+  const sqList        = useApi("/api/v1/strategy-questions").data;
+  const StrategyQuestion = (sqList && (sqList.find(q => q.status === "in-debate") || sqList[0])) || SeedStrategyQuestion;
   return (
     <div className="content fade-in">
       <div className="page-head">
