@@ -1,0 +1,448 @@
+import React, { useState } from "react";
+import { Icon, KpiCard, Progress, HealthPill } from "../components/primitives.jsx";
+import { Departments, KnowledgeDomains, SkillPacks, Company } from "../data/seed.js";
+
+export function DepartmentPage({ deptId }) {
+  const dept = Departments.find(d => d.id === deptId) || Departments[0];
+  const [tab, setTab] = useState("overview");
+  const isID = dept.id === "industrial-design";
+
+  const tabs = isID ? [
+    { id: "overview", label: "概览" },
+    { id: "knowledge", label: "知识中心", count: dept.knowledge },
+    { id: "cmf", label: "CMF Intelligence" },
+    { id: "market", label: "Market Insights" },
+    { id: "skills", label: "技能", count: dept.skills },
+    { id: "workflows", label: "工作流", count: dept.workflows },
+    { id: "projects", label: "项目", count: dept.projects },
+    { id: "assistant", label: "🦞 小龙虾助手" }
+  ] : [
+    { id: "overview", label: "概览" },
+    { id: "knowledge", label: "知识库", count: dept.knowledge },
+    { id: "skills", label: "技能", count: dept.skills },
+    { id: "workflows", label: "工作流", count: dept.workflows },
+    { id: "assistant", label: `${dept.assistant} 助手` }
+  ];
+
+  return (
+    <div className="content fade-in">
+      <div style={{
+        margin: "-28px -32px 24px",
+        padding: "32px 32px 0",
+        background: `linear-gradient(135deg, ${dept.color}10, transparent 60%)`,
+        borderBottom: "1px solid var(--border-soft)"
+      }}>
+        <div className="row" style={{ alignItems: "flex-start", gap: 18, marginBottom: 22 }}>
+          <div style={{ width: 56, height: 56, borderRadius: 14, background: dept.color, color: "#fff", display: "grid", placeItems: "center", boxShadow: `0 8px 24px ${dept.color}40` }}>
+            {React.createElement(Icon[dept.icon], { size: 26 })}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: dept.color, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>{dept.en} Workspace</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: "var(--fg1)" }}>{dept.name}</div>
+            <div className="row" style={{ gap: 12, marginTop: 6, fontSize: 13, color: "var(--fg3)" }}>
+              <span><Icon.User size={12} style={{ verticalAlign: "-2px" }} /> {dept.lead}</span>
+              <span>·</span>
+              <span><Icon.Users size={12} style={{ verticalAlign: "-2px" }} /> {dept.people} 人</span>
+              <span>·</span>
+              <span><Icon.MessageCircle size={12} style={{ verticalAlign: "-2px" }} /> 部门助手 <strong style={{ color: dept.color }}>{dept.assistant}</strong></span>
+              <HealthPill status={dept.status} />
+            </div>
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn btn--ghost btn--sm"><Icon.Settings size={13} /> 配置</button>
+            <button className="btn btn--primary btn--sm" style={{ background: dept.color }}><Icon.MessageCircle size={13} /> 打开{dept.assistant}</button>
+          </div>
+        </div>
+        <div className="tabs" style={{ marginBottom: 0, borderBottom: "none" }}>
+          {tabs.map(t => (
+            <div key={t.id} className={`tab ${tab === t.id ? "is-active" : ""}`} onClick={() => setTab(t.id)}>
+              {t.label}{t.count != null && <span className="tab__count">{t.count}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {tab === "overview" && <DeptOverview dept={dept} />}
+      {tab === "knowledge" && <DeptKnowledge dept={dept} />}
+      {tab === "cmf" && <CMFIntelligence />}
+      {tab === "market" && <MarketInsights />}
+      {tab === "skills" && <DeptSkills dept={dept} />}
+      {tab === "workflows" && <DeptWorkflows />}
+      {tab === "projects" && <DeptProjects dept={dept} />}
+      {tab === "assistant" && <AssistantChat dept={dept} />}
+    </div>
+  );
+}
+
+function DeptOverview({ dept }) {
+  return (
+    <div>
+      <div className="grid grid-cols-4" style={{ marginBottom: 20 }}>
+        <KpiCard label="知识条目" value={dept.knowledge.toLocaleString()} delta="+38" status="up" spark={[900, 940, 970, 1000, 1020, 1030, 1040, 1046]} color={dept.color} />
+        <KpiCard label="本周助手对话" value="412" delta="+62" status="up" spark={[280, 310, 340, 360, 380, 395, 405, 412]} color="#10b981" />
+        <KpiCard label="已运行技能" value="156" delta="+12" status="up" spark={[120, 128, 135, 140, 144, 150, 153, 156]} color="#7c3aed" />
+        <KpiCard label="项目健康度" value="87%" delta="+3pt" status="up" spark={[78, 80, 82, 84, 85, 86, 86, 87]} color="#f59e0b" />
+      </div>
+
+      <div className="grid" style={{ gridTemplateColumns: "minmax(0,2fr) minmax(0,1fr)", gap: 20 }}>
+        <div className="card">
+          <div className="card__head"><div className="card__title"><Icon.Activity size={14} /> 高频问题 (本周)</div></div>
+          <div>
+            {[
+              { q: "PVD 工艺与喷涂在零冷水热水器外壳上的成本对比?", uses: 24, source: "CMF + 工艺知识库" },
+              { q: "G3 新风机在欧标认证上还差哪些?", uses: 18, source: "竞品 + 海外法规" },
+              { q: "全屋净水二代 2026 春夏色彩主推?", uses: 15, source: "趋势 + CMF" },
+              { q: "县域市场厨电单价带在 1500-2500 的 SKU 缺口?", uses: 11, source: "奥维 + 9 大品类" }
+            ].map((q, i) => (
+              <div key={i} style={{ padding: "12px 18px", borderTop: i ? "1px solid var(--border-soft)" : "none" }}>
+                <div className="row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg1)" }}>"{q.q}"</div>
+                  <span className="pill pill--neutral">{q.uses}</span>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--fg3)" }}>来源 {q.source}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          <div className="card__head"><div className="card__title"><Icon.Inbox size={14} /> 待处理事项</div></div>
+          <div>
+            {[
+              { type: "review", text: "苏婉 上传了 38 条 CMF 条目待审核", color: "var(--warning)" },
+              { type: "alert", text: "竞品分析知识域覆盖度低于 70%", color: "var(--warning)" },
+              { type: "task", text: "CMF Phase 2 项目里程碑下周到期", color: "var(--vel-indigo)" },
+              { type: "fb", text: "孙阳 反馈 PVD 工艺成本数据需更新", color: "var(--danger)" }
+            ].map((t, i) => (
+              <div key={i} style={{ padding: "12px 18px", borderTop: i ? "1px solid var(--border-soft)" : "none", display: "flex", gap: 10 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.color, marginTop: 7, flexShrink: 0 }} />
+                <div style={{ fontSize: 13, color: "var(--fg2)", lineHeight: 1.5 }}>{t.text}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeptKnowledge({ dept }) {
+  return (
+    <div>
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)" }}>知识域</div>
+        <button className="btn btn--primary btn--sm"><Icon.Upload size={13} /> 上传到部门</button>
+      </div>
+      <div className="grid grid-cols-4" style={{ marginBottom: 24 }}>
+        {KnowledgeDomains.map(d => (
+          <div key={d.id} className="card" style={{ padding: 16 }}>
+            <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+              <Icon.Folder size={15} style={{ color: dept.color }} />
+              <span className={`pill ${d.health === 'ok' ? 'pill--ok' : 'pill--warn'}`}>{d.coverage}%</span>
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--fg1)", marginBottom: 4 }}>{d.name}</div>
+            <div className="num" style={{ fontSize: 18, fontWeight: 800, color: "var(--fg1)" }}>{d.count}</div>
+            <div style={{ fontSize: 11, color: "var(--fg3)" }}>条目 · 更新 {d.lastUpdate}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CMFIntelligence() {
+  const swatches = [
+    { name: "雾雪白", hex: "#F5F4EE", uses: 42 }, { name: "墨砂黑", hex: "#1F1E1C", uses: 38 },
+    { name: "沙金", hex: "#C9A66B", uses: 24 }, { name: "玄铁灰", hex: "#5A5C5F", uses: 31 },
+    { name: "薄雾蓝", hex: "#A6BFCB", uses: 18 }, { name: "暖香槟", hex: "#D4B895", uses: 15 },
+    { name: "深湖绿", hex: "#1F3D38", uses: 12 }, { name: "瓷釉白", hex: "#EAE8E1", uses: 28 }
+  ];
+  return (
+    <div>
+      <div className="grid" style={{ gridTemplateColumns: "minmax(0, 1fr) 320px", gap: 20 }}>
+        <div className="card">
+          <div className="card__head"><div className="card__title"><Icon.Image size={14} /> 2026 春夏色彩主流</div><span className="pill pill--info">来自 1,046 条 CMF 数据</span></div>
+          <div style={{ padding: 18, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+            {swatches.map(s => (
+              <div key={s.hex} style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border-soft)" }}>
+                <div style={{ height: 80, background: s.hex }} />
+                <div style={{ padding: "8px 10px" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--fg1)" }}>{s.name}</div>
+                  <div className="num" style={{ fontSize: 10, color: "var(--fg3)" }}>{s.hex} · {s.uses} 次引用</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card" style={{ padding: 18 }}>
+          <div className="card__title" style={{ marginBottom: 14 }}><Icon.Camera size={14} /> 上传图片识别</div>
+          <div style={{ border: "2px dashed var(--border)", borderRadius: 10, padding: 28, textAlign: "center", color: "var(--fg3)" }}>
+            <Icon.Upload size={28} style={{ margin: "0 auto 8px", color: "var(--fg4)" }} />
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg2)" }}>拖入产品图片</div>
+            <div style={{ fontSize: 11, color: "var(--fg4)", marginTop: 4 }}>识别色彩 / 材质 / 表面工艺 / CMF 标签</div>
+          </div>
+          <div style={{ marginTop: 14, fontSize: 12, color: "var(--fg3)" }}>
+            最近识别: <strong style={{ color: "var(--fg2)" }}>松下 K3 净水器 (墨砂黑 + 拉丝铝)</strong>
+          </div>
+        </div>
+      </div>
+      <div className="card" style={{ marginTop: 20 }}>
+        <div className="card__head"><div className="card__title"><Icon.GitBranch size={14} /> 材质 × 工艺矩阵 (本季)</div></div>
+        <div style={{ padding: 18, overflow: "auto" }}>
+          <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={{ padding: 8, textAlign: "left" }}></th>
+                {["阳极氧化", "PVD", "喷涂", "拉丝", "高光"].map(p => <th key={p} style={{ padding: 8, fontSize: 11, color: "var(--fg3)", fontWeight: 600 }}>{p}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {["铝合金", "ABS", "玻璃", "不锈钢", "陶瓷"].map(m => (
+                <tr key={m} style={{ borderTop: "1px solid var(--border-soft)" }}>
+                  <td style={{ padding: 10, fontWeight: 600, color: "var(--fg1)" }}>{m}</td>
+                  {[1, 2, 3, 4, 5].map(i => {
+                    const v = (m.length * i) % 9;
+                    const opacity = v / 9;
+                    return <td key={i} style={{ padding: 8, textAlign: "center" }}>
+                      <div style={{ width: 36, height: 24, borderRadius: 4, background: `rgba(79,70,229,${opacity})`, margin: "0 auto", color: opacity > 0.5 ? "#fff" : "var(--fg3)", fontSize: 10, display: "grid", placeItems: "center", fontFamily: "var(--font-mono)" }}>{v ? v * 7 : "—"}</div>
+                    </td>;
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ fontSize: 11, color: "var(--fg3)", marginTop: 10 }}>数字代表近 90 天本部门方案中该组合的使用次数。</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MarketInsights() {
+  return (
+    <div className="grid" style={{ gridTemplateColumns: "minmax(0,2fr) minmax(0,1fr)", gap: 20 }}>
+      <div className="card">
+        <div className="card__head"><div className="card__title"><Icon.BarChart size={14} /> 厨卫品类 价格带分布 · 奥维 2025Q4</div></div>
+        <div style={{ padding: 22 }}>
+          <svg viewBox="0 0 600 220" style={{ width: "100%", height: 220 }}>
+            {[
+              { x: 30, label: "<2K", v: 28 }, { x: 110, label: "2-3K", v: 42 },
+              { x: 190, label: "3-4K", v: 68 }, { x: 270, label: "4-5K", v: 55 },
+              { x: 350, label: "5-7K", v: 38 }, { x: 430, label: "7-10K", v: 22 },
+              { x: 510, label: ">10K", v: 14 }
+            ].map((b, i) => (
+              <g key={i}>
+                <rect x={b.x} y={200 - b.v * 2.5} width="60" height={b.v * 2.5} rx="4" fill={i === 2 ? "#4F46E5" : "#cbd5e1"} />
+                <text x={b.x + 30} y="215" textAnchor="middle" fontSize="11" fill="#64748b">{b.label}</text>
+                <text x={b.x + 30} y={195 - b.v * 2.5} textAnchor="middle" fontSize="10" fill={i === 2 ? "#4F46E5" : "#94a3b8"} fontWeight="700" fontFamily="JetBrains Mono">{b.v}%</text>
+              </g>
+            ))}
+          </svg>
+          <div className="row" style={{ gap: 8, marginTop: 8 }}>
+            <span className="pill pill--indigo">3-4K 价格带为头部机会</span>
+            <span className="pill pill--warn">{">10K"} 高端段竞品集中</span>
+          </div>
+        </div>
+      </div>
+      <div className="card">
+        <div className="card__head"><div className="card__title"><Icon.AlertTriangle size={14} /> 竞品规格警报</div></div>
+        <div>
+          {[
+            { brand: "松下 K3", spec: "废水比 1:1, 售价 4,299", flag: "高于我司 3-4K 段" },
+            { brand: "海尔 净享 Pro", spec: "1500L 通量 / RO + UF", flag: "超过我司主推" },
+            { brand: "美的 X9", spec: "外观采用云朵 CMF", flag: "趋势预警" }
+          ].map((c, i) => (
+            <div key={i} style={{ padding: 14, borderTop: i ? "1px solid var(--border-soft)" : "none" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--fg1)" }}>{c.brand}</div>
+              <div style={{ fontSize: 12, color: "var(--fg2)", marginTop: 2 }}>{c.spec}</div>
+              <span className="pill pill--warn" style={{ marginTop: 6 }}>{c.flag}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeptSkills({ dept }) {
+  const list = SkillPacks.filter(s => s.dept === dept.id);
+  return (
+    <div>
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: "var(--fg3)" }}>
+          <strong style={{ color: "var(--fg1)" }}>{dept.name}</strong> 拥有 <strong className="num" style={{ color: "var(--fg1)" }}>{list.length}</strong> 个 Skill Pack — 详细 CRUD 可在「技能中心」管理。
+        </div>
+        <button className="btn btn--primary btn--sm"><Icon.Plus size={13} /> 新增 Skill</button>
+      </div>
+      <div className="grid grid-cols-3">
+        {list.map(s => (
+          <div key={s.id} className="card" style={{ padding: 18 }}>
+            <div className="row" style={{ marginBottom: 10, gap: 10 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 9, background: dept.color + "18", color: dept.color, display: "grid", placeItems: "center" }}>
+                {React.createElement(Icon[s.icon] || Icon.Sparkles, { size: 17 })}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--fg1)" }}>{s.name}</div>
+                <div className="num" style={{ fontSize: 10, color: "var(--fg3)" }}>{s.version} · {s.maintainer}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--fg3)", marginBottom: 10, lineHeight: 1.5 }}>
+              <div><strong style={{ color: "var(--fg2)" }}>输入:</strong> {s.input}</div>
+              <div><strong style={{ color: "var(--fg2)" }}>输出:</strong> {s.output}</div>
+            </div>
+            <div className="row" style={{ justifyContent: "space-between", paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
+              <div style={{ fontSize: 11, color: "var(--fg3)" }}>{s.uses} 次 · ★ {s.rating}</div>
+              <button className="btn btn--text btn--sm">运行 →</button>
+            </div>
+          </div>
+        ))}
+        {list.length === 0 && (
+          <div className="card" style={{ gridColumn: "1 / -1", padding: 36, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>
+            {dept.name} 暂无 Skill Pack
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DeptWorkflows() {
+  const flows = [
+    { name: "创建设计简报", steps: 5, uses: 64, time: "约 8 分钟" },
+    { name: "材料方案对比", steps: 4, uses: 38, time: "约 5 分钟" },
+    { name: "CMF 可行性检查", steps: 6, uses: 27, time: "约 12 分钟" },
+    { name: "供应商 / 工艺评审", steps: 7, uses: 19, time: "约 18 分钟" },
+    { name: "竞品设计语言图谱", steps: 5, uses: 42, time: "约 10 分钟" },
+    { name: "概念评审备忘录", steps: 4, uses: 31, time: "约 6 分钟" }
+  ];
+  return (
+    <div className="grid grid-cols-2">
+      {flows.map((f, i) => (
+        <div key={i} className="card" style={{ padding: 18 }}>
+          <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+            <Icon.Workflow size={16} style={{ color: "var(--vel-indigo)" }} />
+            <span className="pill pill--neutral">{f.steps} 步</span>
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)", marginBottom: 10 }}>{f.name}</div>
+          <div className="row" style={{ gap: 4, marginBottom: 12 }}>
+            {[...Array(f.steps)].map((_, si) => (
+              <div key={si} style={{ flex: 1, height: 4, borderRadius: 2, background: si < f.steps - 1 ? "var(--vel-indigo)" : "var(--slate-200)" }} />
+            ))}
+          </div>
+          <div className="row" style={{ justifyContent: "space-between", fontSize: 11, color: "var(--fg3)" }}>
+            <span>{f.uses} 次执行 · {f.time}</span>
+            <button className="btn btn--text btn--sm">启动 →</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DeptProjects({ dept }) {
+  return (
+    <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>
+      <div style={{ marginBottom: 8 }}>{dept.name} 项目 CRUD — 在「OKR 与关键项目」总表中按部门过滤即可管理。</div>
+      <button className="btn btn--ghost btn--sm"><Icon.Plus size={12} /> 新增项目</button>
+    </div>
+  );
+}
+
+function AssistantChat({ dept }) {
+  const initial = [
+    { role: "user", text: "PVD 工艺与喷涂在零冷水热水器外壳上,500台试产成本对比?" },
+    { role: "assistant", text: "根据当前部门知识库 (CMF 1,046 条 + 工艺 156 条),给出 500 台试产规模的对比:\n\n• PVD: 单件 ¥38-46,工艺周期 3-4 天,色彩稳定性 ★★★★★\n• 喷涂: 单件 ¥12-18,工艺周期 1-2 天,色彩稳定性 ★★★\n\n建议:外观件用 PVD,内部件用喷涂,综合成本下降约 22%。", sources: ["竞品 CMF 图库 (2025春夏)", "零冷水技术路线图 v2", "供应商能力库 / 杭州东方"], skill: "供应商/材料/工艺检索", okr: ["O1", "O3"] }
+  ];
+  const [msgs, setMsgs] = useState(initial);
+  const [draft, setDraft] = useState("");
+  const send = () => {
+    if (!draft.trim()) return;
+    setMsgs([...msgs, { role: "user", text: draft }]);
+    setDraft("");
+    setTimeout(() => {
+      setMsgs(m => [...m, { role: "assistant", text: "已基于公司 OKR 和部门知识为你生成回答(模拟数据)。这里会包含来源引用、推荐的下一步动作,以及可写回到项目/OKR 的入口。", sources: ["奥维 2025Q4 厨卫品类报告"], skill: "奥维数据分析", okr: ["O1"] }]);
+    }, 600);
+  };
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 280px", gap: 20, height: "calc(100vh - 280px)" }}>
+      <div className="card" style={{ display: "flex", flexDirection: "column" }}>
+        <div className="card__head">
+          <div className="card__title">
+            <span style={{ fontSize: 18 }}>🦞</span>
+            <span>{dept.assistant} · {dept.name} 助手</span>
+            <span className="pill pill--ok"><span className="dot dot--ok" style={{ marginRight: 4 }} />在线</span>
+          </div>
+          <button className="btn btn--text btn--sm">新对话 +</button>
+        </div>
+        <div className="scroll" style={{ flex: 1, padding: 22, overflow: "auto", display: "flex", flexDirection: "column", gap: 18 }}>
+          {msgs.map((m, i) => (
+            <div key={i} style={{ display: "flex", gap: 12, flexDirection: m.role === "user" ? "row-reverse" : "row" }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: m.role === "user" ? "linear-gradient(135deg,#f59e0b,#ef4444)" : dept.color, color: "#fff", display: "grid", placeItems: "center", flexShrink: 0, fontSize: 14, fontWeight: 700 }}>
+                {m.role === "user" ? "陈" : "🦞"}
+              </div>
+              <div style={{ maxWidth: "80%" }}>
+                <div style={{ background: m.role === "user" ? "var(--vel-indigo)" : "var(--slate-50)", color: m.role === "user" ? "#fff" : "var(--fg1)", padding: "12px 16px", borderRadius: 12, fontSize: 13.5, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
+                  {m.text}
+                </div>
+                {m.sources && (
+                  <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                    {m.sources.map((s, si) => <span key={si} className="pill pill--indigo"><Icon.FileText size={10} /> {s}</span>)}
+                  </div>
+                )}
+                {m.okr && (
+                  <div className="row" style={{ gap: 6, marginTop: 4 }}>
+                    {m.okr.map(o => <span key={o} className="pill pill--ok num">关联 {o}</span>)}
+                    {m.skill && <span className="pill pill--neutral"><Icon.Sparkles size={9} /> {m.skill}</span>}
+                  </div>
+                )}
+                {m.role === "assistant" && (
+                  <div className="row" style={{ gap: 12, marginTop: 8, fontSize: 11, color: "var(--fg3)" }}>
+                    <button>👍 有用</button>
+                    <button>👎 不准确</button>
+                    <button>+ 补充知识</button>
+                    <button>↗ 写入项目</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: 14, borderTop: "1px solid var(--border-soft)" }}>
+          <div className="row" style={{ gap: 8, padding: "8px 12px", background: "var(--slate-50)", border: "1px solid var(--border)", borderRadius: 10 }}>
+            <button className="btn btn--icon btn--text"><Icon.Paperclip size={15} /></button>
+            <button className="btn btn--icon btn--text"><Icon.Image size={15} /></button>
+            <input value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder={`@${dept.assistant} 帮我…`} style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 13, color: "var(--fg1)" }} />
+            <button className="btn btn--icon btn--text"><Icon.Mic size={15} /></button>
+            <button className="btn btn--primary btn--sm" onClick={send}><Icon.Send size={13} /> 发送</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="card" style={{ padding: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>注入的上下文</div>
+          <div style={{ fontSize: 12, color: "var(--fg2)", lineHeight: 1.7 }}>
+            <div className="row" style={{ gap: 6 }}><Icon.Building size={11} /> 公司: <strong>{Company.name}</strong></div>
+            <div className="row" style={{ gap: 6 }}><Icon.Target size={11} /> OKR: O1, O3</div>
+            <div className="row" style={{ gap: 6 }}><Icon.Layers size={11} /> 项目: 全屋净水 2.0</div>
+            <div className="row" style={{ gap: 6 }}><Icon.Database size={11} /> 部门知识: {dept.knowledge.toLocaleString()} 条</div>
+          </div>
+        </div>
+        <div className="card" style={{ padding: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>可用技能</div>
+          {SkillPacks.filter(s => s.dept === dept.id).slice(0, 4).map(s => (
+            <div key={s.id} style={{ display: "flex", gap: 8, padding: "6px 0", fontSize: 12 }}>
+              <Icon.Sparkles size={12} style={{ color: dept.color, marginTop: 3 }} />
+              <div>{s.name}</div>
+            </div>
+          ))}
+        </div>
+        <div className="card" style={{ padding: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>历史对话 (今日)</div>
+          {["PVD vs 喷涂成本", "奥维 Q4 价格带分析", "G3 欧标缺口", "局改方案色彩主推"].map((h, i) => (
+            <div key={i} style={{ padding: "6px 0", fontSize: 12, color: "var(--fg2)", borderTop: i ? "1px solid var(--border-soft)" : "none" }}>{h}</div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

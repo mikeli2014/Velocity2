@@ -1,0 +1,335 @@
+import React, { useState } from "react";
+import { Icon } from "../components/primitives.jsx";
+import { StrategyQuestion, Agents, DebateMessages, KnowledgeSources } from "../data/seed.js";
+
+export function StrategyPage() {
+  const [tab, setTab] = useState("canvas");
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--header-h))" }}>
+      <div style={{ padding: "16px 28px 0", borderBottom: "1px solid var(--border-soft)", background: "#fff" }}>
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--vel-indigo)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>战略工作台 · 第 3 轮研讨</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "var(--fg1)", letterSpacing: "-0.01em" }}>{StrategyQuestion.title}</div>
+            <div className="row" style={{ gap: 10, fontSize: 12, color: "var(--fg3)", marginTop: 4 }}>
+              <span><Icon.User size={11} style={{ verticalAlign: "-2px" }} /> {StrategyQuestion.asker}</span>
+              <span>·</span>
+              <span>{StrategyQuestion.asked}</span>
+              <span>·</span>
+              <span>关联 OKR <strong style={{ color: "var(--vel-indigo-700)" }}>{StrategyQuestion.okrs.join(", ")}</strong></span>
+              <span>·</span>
+              <span>{StrategyQuestion.context.length} 条背景资料</span>
+            </div>
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn btn--ghost btn--sm"><Icon.Save size={13} /> 保存</button>
+            <button className="btn btn--ghost btn--sm"><Icon.Pause size={13} /> 暂停研讨</button>
+            <button className="btn btn--primary btn--sm"><Icon.Sparkles size={13} /> 生成 OKR / 项目草案</button>
+          </div>
+        </div>
+        <div className="tabs" style={{ marginBottom: 0, borderBottom: "none" }}>
+          {[
+            { id: "canvas", label: "画布 (Spatial)" },
+            { id: "war", label: "War Council" },
+            { id: "options", label: "战略选项", count: 3 },
+            { id: "output", label: "结构化输出" }
+          ].map(t => (
+            <div key={t.id} className={`tab ${tab === t.id ? "is-active" : ""}`} onClick={() => setTab(t.id)}>
+              {t.label}{t.count != null && <span className="tab__count">{t.count}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+        {tab === "canvas" && <StrategyCanvas />}
+        {tab === "war" && <WarCouncil />}
+        {tab === "options" && <StrategyOptions />}
+        {tab === "output" && <StructuredOutput />}
+      </div>
+    </div>
+  );
+}
+
+function StrategyCanvas() {
+  const cx = 50, cy = 50;
+  const positions = Agents.map((a, i) => {
+    const angle = (i / Agents.length) * Math.PI * 2 - Math.PI / 2;
+    return { ...a, x: 50 + Math.cos(angle) * 32, y: 50 + Math.sin(angle) * 30 };
+  });
+  return (
+    <div className="canvas-stage scroll" style={{ height: "100%" }}>
+      <div style={{ position: "absolute", inset: 0 }}>
+        <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+          <defs>
+            <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="rgba(99,102,241,0.6)" />
+              <stop offset="100%" stopColor="rgba(168,85,247,0.2)" />
+            </linearGradient>
+          </defs>
+          {positions.map((p, i) => (
+            <line key={i}
+              x1={`${cx}%`} y1={`${cy}%`}
+              x2={`${p.x}%`} y2={`${p.y}%`}
+              stroke="url(#line)" strokeWidth="1" strokeDasharray="3 4" opacity="0.6"
+            />
+          ))}
+        </svg>
+
+        <div style={{
+          position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)",
+          width: 320, padding: 22,
+          background: "linear-gradient(135deg, #312E81, #4C1D95)",
+          color: "#fff", borderRadius: 18,
+          boxShadow: "0 20px 60px rgba(99,102,241,0.4), 0 0 0 1px rgba(255,255,255,0.1)",
+          zIndex: 5
+        }}>
+          <div style={{ fontSize: 10, color: "#c4b5fd", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700, marginBottom: 8 }}>战略问题 · Mission</div>
+          <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.35, marginBottom: 12 }}>{StrategyQuestion.title}</div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", lineHeight: 1.5 }}>
+            上下文已注入: {StrategyQuestion.context.length} 条公司知识 · {StrategyQuestion.okrs.length} 个 OKR · {StrategyQuestion.agents.length} 个 Agent
+          </div>
+          <div className="row" style={{ marginTop: 14, gap: 8 }}>
+            <span className="pill" style={{ background: "rgba(255,255,255,0.12)", color: "#fff" }}>第 3 轮</span>
+            <span className="pill" style={{ background: "rgba(16,185,129,0.2)", color: "#6ee7b7" }}>研讨中</span>
+          </div>
+        </div>
+
+        {positions.map(p => {
+          const lastMsg = DebateMessages.filter(m => m.agent === p.id).slice(-1)[0];
+          return (
+            <div key={p.id} style={{
+              position: "absolute", left: `${p.x}%`, top: `${p.y}%`, transform: "translate(-50%, -50%)",
+              width: 220,
+              background: "rgba(15, 23, 42, 0.85)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              backdropFilter: "blur(10px)",
+              borderRadius: 12, padding: 12,
+              color: "#fff",
+              boxShadow: `0 10px 30px ${p.color}30`
+            }}>
+              <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 7, background: p.color, display: "grid", placeItems: "center", color: "#fff" }}>
+                  {React.createElement(Icon[p.icon] || Icon.User, { size: 14 })}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>{p.name}</div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)" }}>{p.focus}</div>
+                </div>
+                {lastMsg && (
+                  <span className="pill" style={{
+                    background: lastMsg.stance === "pro" ? "rgba(16,185,129,0.18)" : lastMsg.stance === "con" ? "rgba(239,68,68,0.18)" : "rgba(245,158,11,0.18)",
+                    color: lastMsg.stance === "pro" ? "#6ee7b7" : lastMsg.stance === "con" ? "#fca5a5" : "#fcd34d"
+                  }}>
+                    {lastMsg.stance === "pro" ? "赞成" : lastMsg.stance === "con" ? "反对" : "保留"}
+                  </span>
+                )}
+              </div>
+              {lastMsg && (
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.75)", lineHeight: 1.5, maxHeight: 50, overflow: "hidden" }}>
+                  {lastMsg.text.slice(0, 80)}…
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <div style={{
+          position: "absolute", bottom: 24, left: "50%", transform: "translateX(-50%)",
+          display: "flex", gap: 4, padding: 4,
+          background: "rgba(15,23,42,0.92)", border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 12, backdropFilter: "blur(20px)", zIndex: 10
+        }}>
+          {["Plus", "User", "FileText", "GitBranch", "PlayCircle"].map((ic, i) => (
+            <button key={i} style={{ width: 36, height: 36, borderRadius: 8, color: "rgba(255,255,255,0.7)", display: "grid", placeItems: "center" }}>
+              {React.createElement(Icon[ic], { size: 16 })}
+            </button>
+          ))}
+          <div style={{ width: 1, background: "rgba(255,255,255,0.1)", margin: "4px 4px" }} />
+          <button className="btn btn--primary btn--sm" style={{ padding: "0 12px" }}><Icon.Sparkles size={13} /> 进入下一轮</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WarCouncil() {
+  return (
+    <div style={{ height: "100%", overflow: "auto", background: "#0B1220", color: "#fff" }} className="scroll">
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 40px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {[1, 2, 3].map(round => (
+            <div key={round}>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700, padding: "16px 0 10px", borderBottom: "1px solid rgba(255,255,255,0.08)", marginBottom: 12 }}>
+                第 {round} 轮 · {round === 1 ? "首轮陈述" : round === 2 ? "交叉质询" : "立场收敛"}
+              </div>
+              {DebateMessages.filter(m => m.round === round).map((m, i) => {
+                const ag = Agents.find(a => a.id === m.agent);
+                return (
+                  <div key={i} style={{ display: "flex", gap: 14, marginBottom: 16 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 10, background: ag.color, color: "#fff", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                      {React.createElement(Icon[ag.icon] || Icon.User, { size: 17 })}
+                    </div>
+                    <div style={{ flex: 1, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: 16 }}>
+                      <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+                        <div className="row" style={{ gap: 8 }}>
+                          <span style={{ fontWeight: 700, fontSize: 13, color: "#fff" }}>{ag.name}</span>
+                          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{ag.role}</span>
+                        </div>
+                        <span className="pill" style={{
+                          background: m.stance === "pro" ? "rgba(16,185,129,0.18)" : m.stance === "con" ? "rgba(239,68,68,0.18)" : "rgba(245,158,11,0.18)",
+                          color: m.stance === "pro" ? "#6ee7b7" : m.stance === "con" ? "#fca5a5" : "#fcd34d"
+                        }}>{m.stance === "pro" ? "赞成" : m.stance === "con" ? "反对" : "保留"}</span>
+                      </div>
+                      <div style={{ fontSize: 13.5, color: "rgba(255,255,255,0.88)", lineHeight: 1.65, marginBottom: m.sources.length ? 10 : 0 }}>{m.text}</div>
+                      {m.sources.length > 0 && (
+                        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                          {m.sources.map(sid => {
+                            const src = KnowledgeSources.find(k => k.id === sid);
+                            return (
+                              <span key={sid} className="pill" style={{ background: "rgba(99,102,241,0.18)", color: "#c4b5fd" }}>
+                                <Icon.FileText size={10} /> {src?.title.slice(0, 22)}…
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 24, padding: 18, background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 12 }}>
+          <div className="row" style={{ gap: 10, marginBottom: 8 }}>
+            <Icon.Sparkles size={16} style={{ color: "#c4b5fd" }} />
+            <div style={{ fontWeight: 700, fontSize: 13, color: "#fff" }}>研讨摘要 · 由 Velocity 自动生成</div>
+          </div>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", lineHeight: 1.7 }}>
+            7 个 Agent 中 <strong style={{ color: "#6ee7b7" }}>3 个赞成</strong>(产品/GTM/组织)、
+            <strong style={{ color: "#fcd34d" }}> 3 个保留</strong>(财务/运营/供应链)、
+            <strong style={{ color: "#fca5a5" }}> 1 个反对</strong>(风险)。
+            核心张力在于"窗口期 vs 渠道冲突 vs 履约能力"。建议生成 3 个战略选项,分别对应 激进 / 稳健 / 渐进 投入节奏,并在 OKR 草案中明确县域服务网络作为前置条件。
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StrategyOptions() {
+  const opts = [
+    { name: "选项 A · 激进切换", desc: "DTC 占比 Q4 达到 35%,以全屋净水套系为核心 SKU。", roi: "高", risk: "高", time: "Q2 启动 / Q4 见效", pros: 3, cons: 2 },
+    { name: "选项 B · 稳健并行", desc: "DTC 占比 22%,保留线下,2 城试点县域服务网络。", roi: "中", risk: "中", time: "Q2 试点 / Q3 复制", pros: 5, cons: 1, recommended: true },
+    { name: "选项 C · 渐进观望", desc: "维持现状 13%,先稳固 BP/SC/SA 三角协同。", roi: "低", risk: "低", time: "Q3 评估", pros: 2, cons: 3 }
+  ];
+  return (
+    <div className="scroll" style={{ height: "100%", overflow: "auto", padding: 32, background: "var(--bg-page)" }}>
+      <div className="grid grid-cols-3" style={{ maxWidth: 1200, margin: "0 auto" }}>
+        {opts.map((o, i) => (
+          <div key={i} className="card" style={{
+            padding: 22,
+            border: o.recommended ? "2px solid var(--vel-indigo)" : "1px solid var(--border-soft)",
+            position: "relative"
+          }}>
+            {o.recommended && <span className="pill pill--indigo" style={{ position: "absolute", top: -10, left: 18 }}>⭐ 推荐方案</span>}
+            <div style={{ fontSize: 11, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 6 }}>战略选项</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "var(--fg1)", marginBottom: 8 }}>{o.name}</div>
+            <div style={{ fontSize: 13, color: "var(--fg2)", lineHeight: 1.6, marginBottom: 16 }}>{o.desc}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+              <div style={{ padding: "8px 10px", background: "var(--slate-50)", borderRadius: 6 }}>
+                <div style={{ fontSize: 10, color: "var(--fg3)", textTransform: "uppercase" }}>ROI</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)" }}>{o.roi}</div>
+              </div>
+              <div style={{ padding: "8px 10px", background: "var(--slate-50)", borderRadius: 6 }}>
+                <div style={{ fontSize: 10, color: "var(--fg3)", textTransform: "uppercase" }}>风险</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: o.risk === "高" ? "var(--danger-text)" : o.risk === "中" ? "var(--warning-text)" : "var(--success-text)" }}>{o.risk}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--fg3)", marginBottom: 10 }}>{o.time}</div>
+            <div className="row" style={{ gap: 12, marginBottom: 14 }}>
+              <span className="pill pill--ok">+{o.pros} 赞成</span>
+              <span className="pill pill--danger">-{o.cons} 反对</span>
+            </div>
+            <button className={`btn ${o.recommended ? 'btn--primary' : 'btn--ghost'} btn--sm`} style={{ width: "100%", justifyContent: "center" }}>
+              {o.recommended ? "选定此方案 →" : "查看详细分析"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StructuredOutput() {
+  return (
+    <div className="scroll" style={{ height: "100%", overflow: "auto", padding: 32, background: "var(--bg-page)" }}>
+      <div style={{ maxWidth: 980, margin: "0 auto" }}>
+        <div className="card" style={{ padding: 24, marginBottom: 16 }}>
+          <div className="row" style={{ gap: 10, marginBottom: 16 }}>
+            <Icon.Target size={18} style={{ color: "var(--vel-indigo)" }} />
+            <div style={{ fontSize: 16, fontWeight: 800, color: "var(--fg1)" }}>建议生成 Objective (草案)</div>
+          </div>
+          <div style={{ background: "var(--vel-indigo-50)", border: "1px solid var(--vel-indigo-100)", borderRadius: 10, padding: 18, marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--vel-indigo-700)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>O5 · DTC 渠道增长</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--fg1)", marginBottom: 12 }}>FY26 把线上 DTC 打造为全屋净水套系的主力增长引擎</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {[
+                { kr: "KR1 · 线上 DTC 占比", target: "≥ 22%" },
+                { kr: "KR2 · 全屋净水套系客单价", target: "≥ ¥18,000" },
+                { kr: "KR3 · 县域服务履约率 NPS", target: "≥ 60" }
+              ].map((kr, i) => (
+                <div key={i} style={{ display: "flex", gap: 10, padding: "8px 12px", background: "#fff", borderRadius: 6 }}>
+                  <Icon.Hash size={13} style={{ color: "var(--fg4)", marginTop: 2 }} />
+                  <div style={{ flex: 1, fontSize: 13, color: "var(--fg1)" }}>{kr.kr}</div>
+                  <span className="pill pill--info num">{kr.target}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn btn--primary btn--sm">发布到 OKR 注册表</button>
+            <button className="btn btn--ghost btn--sm">编辑后发布</button>
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: 24, marginBottom: 16 }}>
+          <div className="row" style={{ gap: 10, marginBottom: 16 }}>
+            <Icon.Layers size={18} style={{ color: "#10b981" }} />
+            <div style={{ fontSize: 16, fontWeight: 800, color: "var(--fg1)" }}>建议生成关键项目 (草案)</div>
+          </div>
+          {[
+            { name: "DTC 旗舰内容工厂搭建", owner: "Anna 林 · 市场部", milestone: "5 月样板间直播首秀" },
+            { name: "县域服务网络 30 城前置铺设", owner: "王锐 · 服务部", milestone: "Q2 完成 SC 选型" },
+            { name: "全屋净水套系柔性产线改造", owner: "韩松 · 供应链", milestone: "Q3 试产验证" }
+          ].map((p, i) => (
+            <div key={i} style={{ display: "flex", gap: 12, padding: 12, borderBottom: i < 2 ? "1px solid var(--border-soft)" : "none" }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: "#10b98118", color: "#10b981", display: "grid", placeItems: "center" }}>
+                <Icon.Package size={16} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg1)" }}>{p.name}</div>
+                <div style={{ fontSize: 11, color: "var(--fg3)", marginTop: 2 }}>{p.owner} · 里程碑 <strong style={{ color: "var(--fg2)" }}>{p.milestone}</strong></div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="card" style={{ padding: 24 }}>
+          <div className="row" style={{ gap: 10, marginBottom: 14 }}>
+            <Icon.Quote size={18} style={{ color: "#7c3aed" }} />
+            <div style={{ fontSize: 16, fontWeight: 800, color: "var(--fg1)" }}>决策日志条目 (草案)</div>
+          </div>
+          <div style={{ fontSize: 13, color: "var(--fg2)", lineHeight: 1.7 }}>
+            <p><strong style={{ color: "var(--fg1)" }}>问题:</strong> FY26 是否加大线上 DTC 渠道投入?</p>
+            <p><strong style={{ color: "var(--fg1)" }}>结论:</strong> 选择"稳健并行"方案 — DTC 占比 22%,保留线下,2 城试点县域服务网络。</p>
+            <p><strong style={{ color: "var(--fg1)" }}>关键假设:</strong> 县域履约能力可在 Q2 完成铺设;BP/SC/SA 同价机制 Q3 闭环。</p>
+            <p><strong style={{ color: "var(--fg1)" }}>反对意见:</strong> 风险视角(渠道冲突)、运营视角(履约能力)— 已纳入前置条件。</p>
+            <p><strong style={{ color: "var(--fg1)" }}>证据来源:</strong> 7 条公司知识、3 条市场数据、4 条历史决策。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
