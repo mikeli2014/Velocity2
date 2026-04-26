@@ -5,53 +5,14 @@ audit log. All but routing rules are append-mostly with small mutations
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from ..audit import emit_audit as _emit_audit
 from ..db import get_db
 
 router = APIRouter(prefix="/api/v1", tags=["inbox"])
-
-
-def _now_label() -> str:
-    """Produce a human-readable timestamp matching the existing seed
-    shape (``2026-04-26 14:32``). Audit log + last_hit columns both use
-    this format so the frontend's table renders consistently."""
-    return datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M")
-
-
-def _emit_audit(
-    db: Session,
-    *,
-    category: str,
-    severity: str,
-    action: str,
-    target: str | None,
-    scope: str | None = None,
-    actor: str = "system",
-    link: dict | None = None,
-) -> models.AuditEvent:
-    """Append a single AuditEvent row. Caller is responsible for
-    committing — we share the request's session so the write is atomic
-    with whatever triggered it.
-    """
-    row = models.AuditEvent(
-        id=schemas.make_id("au"),
-        at=_now_label(),
-        actor=actor,
-        ip="127.0.0.1",  # no real auth yet; placeholder so the col is non-null
-        category=category,
-        severity=severity,
-        action=action,
-        target=target,
-        scope=scope,
-        link=link,
-    )
-    db.add(row)
-    return row
 
 
 # --- Ingest Queue -------------------------------------------------------

@@ -146,6 +146,51 @@ class ProjectOut(_CamelModel):
     linked_sources: list[str] = Field(default_factory=list)
 
 
+class ProjectCreate(_CamelModel):
+    """Body for ``POST /api/v1/projects``. ``id`` is optional; the
+    server generates one if absent."""
+    id: str | None = None
+    name: str
+    health: str | None = "ok"
+    progress: int = 0
+    owner: str | None = None
+    dept_id: str | None = None
+    dept: str | None = None
+    okr: str | None = None
+    milestone: str | None = None
+    due: str | None = None
+    started: str | None = None
+    risks: int = 0
+    description: str | None = None
+    contributors: list[str] = Field(default_factory=list)
+    milestones: list[dict[str, Any]] = Field(default_factory=list)
+    risks_detail: list[dict[str, Any]] = Field(default_factory=list)
+    linked_decisions: list[str] = Field(default_factory=list)
+    linked_sources: list[str] = Field(default_factory=list)
+
+
+class ProjectUpdate(_CamelModel):
+    """Patch body for ``PATCH /api/v1/projects/{id}``. Every field
+    optional; only ``model_dump(exclude_unset=True)`` keys are written."""
+    name: str | None = None
+    health: str | None = None
+    progress: int | None = None
+    owner: str | None = None
+    dept_id: str | None = None
+    dept: str | None = None
+    okr: str | None = None
+    milestone: str | None = None
+    due: str | None = None
+    started: str | None = None
+    risks: int | None = None
+    description: str | None = None
+    contributors: list[str] | None = None
+    milestones: list[dict[str, Any]] | None = None
+    risks_detail: list[dict[str, Any]] | None = None
+    linked_decisions: list[str] | None = None
+    linked_sources: list[str] | None = None
+
+
 class DecisionOut(_CamelModel):
     id: str
     title: str
@@ -161,6 +206,41 @@ class DecisionOut(_CamelModel):
     assumptions: list[str] = Field(default_factory=list)
     dissent: list[dict[str, Any]] = Field(default_factory=list)
     evidence_sources: list[str] = Field(default_factory=list)
+
+
+class DecisionCreate(_CamelModel):
+    """Body for ``POST /api/v1/decisions``."""
+    id: str | None = None
+    title: str
+    date: str | None = None
+    owner: str | None = None
+    status: str | None = "decided"
+    linked_kr: str | None = None
+    linked_project: str | None = None
+    linked_question: str | None = None
+    question: str | None = None
+    conclusion: str | None = None
+    retrospective: str | None = None
+    assumptions: list[str] = Field(default_factory=list)
+    dissent: list[dict[str, Any]] = Field(default_factory=list)
+    evidence_sources: list[str] = Field(default_factory=list)
+
+
+class DecisionUpdate(_CamelModel):
+    """Patch body for ``PATCH /api/v1/decisions/{id}``."""
+    title: str | None = None
+    date: str | None = None
+    owner: str | None = None
+    status: str | None = None
+    linked_kr: str | None = None
+    linked_project: str | None = None
+    linked_question: str | None = None
+    question: str | None = None
+    conclusion: str | None = None
+    retrospective: str | None = None
+    assumptions: list[str] | None = None
+    dissent: list[dict[str, Any]] | None = None
+    evidence_sources: list[str] | None = None
 
 
 class KnowledgeDomainOut(_CamelModel):
@@ -196,6 +276,51 @@ class KnowledgeSourceOut(_CamelModel):
     embeddings: int | None = None
     linked_projects: list[str] = Field(default_factory=list)
     linked_decisions: list[str] = Field(default_factory=list)
+
+
+class KnowledgeSourceCreate(_CamelModel):
+    """Body for ``POST /api/v1/knowledge-sources``. Used by the
+    ingest-queue → source promotion flow (queued for Phase 2 step E) and
+    by direct uploads."""
+    id: str | None = None
+    title: str
+    type: str | None = None
+    scope: str | None = None
+    quality: str | None = "draft"
+    uses: int = 0
+    owner: str | None = None
+    updated: str | None = None
+    size: str | None = None
+    summary: str | None = None
+    excerpt: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    pages: int | None = None
+    lang: str | None = None
+    uploaded_by: str | None = None
+    embeddings: int | None = None
+    linked_projects: list[str] = Field(default_factory=list)
+    linked_decisions: list[str] = Field(default_factory=list)
+
+
+class KnowledgeSourceUpdate(_CamelModel):
+    """Patch body for ``PATCH /api/v1/knowledge-sources/{id}``."""
+    title: str | None = None
+    type: str | None = None
+    scope: str | None = None
+    quality: str | None = None
+    uses: int | None = None
+    owner: str | None = None
+    updated: str | None = None
+    size: str | None = None
+    summary: str | None = None
+    excerpt: str | None = None
+    tags: list[str] | None = None
+    pages: int | None = None
+    lang: str | None = None
+    uploaded_by: str | None = None
+    embeddings: int | None = None
+    linked_projects: list[str] | None = None
+    linked_decisions: list[str] | None = None
 
 
 class KnowledgeOverviewOut(_CamelModel):

@@ -16,6 +16,14 @@ import {
   KRCheckIns as SeedCheckIns
 } from "../data/seed.js";
 
+// Strip frontend-only draft flags before sending a row to the API. The
+// wire schema only knows the persisted fields.
+function stripDraftFlags(row) {
+  const out = { ...row };
+  delete out.__isNew;
+  return out;
+}
+
 export function OkrPage() {
   const [tab, setTab] = useState("objectives");
 
@@ -33,12 +41,11 @@ export function OkrPage() {
     setObjectives(apiObjectives);
   }
 
-  // Projects + Decisions are READ-ONLY against the API in Phase 2 step 1.
-  // Local mutations (create/edit/delete) stay client-side until POST/PATCH/
-  // DELETE endpoints land for these resources. When fresh API data arrives,
-  // we sync — local edits not yet persisted to the server are discarded
-  // (acceptable demo trade-off until writes are wired).
-  const { data: apiProjects } = useApi("/api/v1/projects");
+  // Projects + Decisions go through full API CRUD. Writes apply
+  // optimistically locally then refresh from the server; on failure
+  // (offline / preview without backend) we keep the local edit and
+  // log a warning, mirroring the objectives + routing-rules patterns.
+  const { data: apiProjects, refresh: refreshProjects } = useApi("/api/v1/projects");
   const baseProjects = apiProjects ?? SeedProjects.map(p => ({ ...p }));
   const [projects, setProjects] = useState(baseProjects);
   const lastProjectsRef = useRef(apiProjects);
@@ -47,7 +54,7 @@ export function OkrPage() {
     setProjects(apiProjects);
   }
 
-  const { data: apiDecisions } = useApi("/api/v1/decisions");
+  const { data: apiDecisions, refresh: refreshDecisions } = useApi("/api/v1/decisions");
   const baseDecisions = apiDecisions ?? SeedDecisions.map(d => ({ ...d }));
   const [decisions, setDecisions] = useState(baseDecisions);
   const lastDecisionsRef = useRef(apiDecisions);
@@ -80,9 +87,8 @@ export function OkrPage() {
       const copy = list.slice(); copy[i] = next; return copy;
     });
     setEditingObj(null);
-    // Persist. eslint-disable-next-line no-unused-vars
     try {
-      const { __isNew: _omit, ...payload } = next;
+      const payload = stripDraftFlags(next);
       if (isNew) {
         await apiPost("/api/v1/objectives", payload);
       } else {
@@ -117,15 +123,38 @@ export function OkrPage() {
     });
   }
 
-  function saveProject(next) {
+  async function saveProject(next) {
+    const isNew = !!next.__isNew;
     setProjects(list => {
       const i = list.findIndex(p => p.id === next.id);
       if (i === -1) return [...list, next];
       const copy = list.slice(); copy[i] = next; return copy;
     });
     setEditingProj(null);
+    try {
+      const payload = stripDraftFlags(next);
+      if (isNew) {
+        await apiPost("/api/v1/projects", payload);
+      } else {
+        await apiPatch(`/api/v1/projects/${next.id}`, payload);
+      }
+      refreshProjects();
+    } catch (err) {
+      console.warn("[velocity] project save failed; keeping local-only", err);
+    }
   }
-  function deleteProject(id) { setProjects(list => list.filter(p => p.id !== id)); setConfirm(null); }
+  async function deleteProject(id) {
+    setProjects(list => list.filter(p => p.id !== id));
+    setConfirm(null);
+    try {
+      await apiDelete(`/api/v1/projects/${id}`);
+      refreshProjects();
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 404)) {
+        console.warn("[velocity] project delete failed; keeping local-only", err);
+      }
+    }
+  }
   function newProject() {
     setEditingProj({
       id: makeId("proj"), name: "", health: "ok", progress: 0, owner: "", dept: "",
@@ -133,15 +162,38 @@ export function OkrPage() {
     });
   }
 
-  function saveDecision(next) {
+  async function saveDecision(next) {
+    const isNew = !!next.__isNew;
     setDecisions(list => {
       const i = list.findIndex(d => d.id === next.id);
       if (i === -1) return [...list, next];
       const copy = list.slice(); copy[i] = next; return copy;
     });
     setEditingDec(null);
+    try {
+      const payload = stripDraftFlags(next);
+      if (isNew) {
+        await apiPost("/api/v1/decisions", payload);
+      } else {
+        await apiPatch(`/api/v1/decisions/${next.id}`, payload);
+      }
+      refreshDecisions();
+    } catch (err) {
+      console.warn("[velocity] decision save failed; keeping local-only", err);
+    }
   }
-  function deleteDecision(id) { setDecisions(list => list.filter(d => d.id !== id)); setConfirm(null); }
+  async function deleteDecision(id) {
+    setDecisions(list => list.filter(d => d.id !== id));
+    setConfirm(null);
+    try {
+      await apiDelete(`/api/v1/decisions/${id}`);
+      refreshDecisions();
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 404)) {
+        console.warn("[velocity] decision delete failed; keeping local-only", err);
+      }
+    }
+  }
   function newDecision() {
     const today = new Date().toISOString().slice(0, 10);
     setEditingDec({

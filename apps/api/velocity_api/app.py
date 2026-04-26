@@ -26,7 +26,19 @@ from sqlalchemy import inspect
 
 from . import __version__, models, seed_data
 from .db import SessionLocal, create_all, engine
-from .routes import automation, catalog, chat, debate, inbox, knowledge, objectives, route
+from .routes import (
+    automation,
+    catalog,
+    chat,
+    debate,
+    decisions,
+    inbox,
+    knowledge,
+    knowledge_sources,
+    objectives,
+    projects,
+    route,
+)
 from .schemas import HealthOut
 from .settings import settings
 
@@ -121,6 +133,9 @@ def health():
 
 app.include_router(objectives.router)
 app.include_router(catalog.router)
+app.include_router(projects.router)
+app.include_router(decisions.router)
+app.include_router(knowledge_sources.router)
 app.include_router(knowledge.router)
 app.include_router(automation.router)
 app.include_router(inbox.router)

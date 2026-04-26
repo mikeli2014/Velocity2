@@ -31,41 +31,10 @@ def list_departments(db: Session = Depends(get_db)):
     return [schemas.DepartmentOut.model_validate(r) for r in rows]
 
 
-@router.get("/projects", response_model=list[schemas.ProjectOut])
-def list_projects(db: Session = Depends(get_db)):
-    rows = db.query(models.Project).order_by(models.Project.id).all()
-    return [schemas.ProjectOut.model_validate(r) for r in rows]
-
-
-@router.get("/projects/{project_id}", response_model=schemas.ProjectOut)
-def get_project(project_id: str, db: Session = Depends(get_db)):
-    row = db.get(models.Project, project_id)
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project_not_found")
-    return schemas.ProjectOut.model_validate(row)
-
-
-@router.get("/decisions", response_model=list[schemas.DecisionOut])
-def list_decisions(db: Session = Depends(get_db)):
-    rows = db.query(models.Decision).order_by(models.Decision.date.desc()).all()
-    return [schemas.DecisionOut.model_validate(r) for r in rows]
-
-
-@router.get("/knowledge-sources", response_model=list[schemas.KnowledgeSourceOut])
-def list_knowledge_sources(db: Session = Depends(get_db)):
-    rows = db.query(models.KnowledgeSource).order_by(models.KnowledgeSource.id).all()
-    return [schemas.KnowledgeSourceOut.model_validate(r) for r in rows]
-
-
-@router.get("/knowledge-sources/{source_id}", response_model=schemas.KnowledgeSourceOut)
-def get_knowledge_source(source_id: str, db: Session = Depends(get_db)):
-    row = db.get(models.KnowledgeSource, source_id)
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="source_not_found")
-    return schemas.KnowledgeSourceOut.model_validate(row)
-
-
 # --- Activity / Agents / Strategy Questions -----------------------------
+# Projects / Decisions / KnowledgeSources have moved to their own per-
+# resource modules (projects.py, decisions.py, knowledge_sources.py)
+# now that they have writes.
 
 
 @router.get("/activity", response_model=list[schemas.ActivityOut])

@@ -42,15 +42,20 @@ apps/api/
 │   ├── schemas.py         Pydantic shapes; camelCase via alias generator
 │   ├── seed_data.py       (Phase 1) Python literal mirror of seed.js
 │   ├── app.py             FastAPI app assembly + lifespan + CORS
+│   ├── audit.py           Shared `emit_audit` helper — every write
+│   │                       endpoint that should leave a trail calls this
 │   └── routes/
-│       ├── objectives.py  Full CRUD: GET/POST/PATCH/DELETE on objectives
-│       ├── catalog.py     Read-only: company / departments / projects /
-│       │                  decisions / knowledge-sources
-│       ├── knowledge.py   Knowledge Center: domains + overview aggregate
+│       ├── objectives.py  Full CRUD on objectives + nested KRs
+│       ├── projects.py    Full CRUD on projects (audit category=project)
+│       ├── decisions.py   Full CRUD on decisions (audit category=decision)
+│       ├── knowledge_sources.py  Full CRUD (audit category=knowledge)
+│       ├── catalog.py     Read-only: company / departments / activity /
+│       │                  agents / strategy-questions
+│       ├── knowledge.py   Knowledge domains + overview aggregate
 │       ├── automation.py  Skill packs / workflows / runs
-│       ├── inbox.py       Notifications / routing / audit
-│       ├── chat.py        Anthropic chat (prompt caching) — backs the
-│       │                  AssistantChat panel + Skill RunDialog
+│       ├── inbox.py       Ingest queue / notifications / routing / audit
+│       ├── chat.py        Anthropic chat (prompt caching, streaming) —
+│       │                  backs AssistantChat + Skill RunDialog
 │       ├── debate.py      Multi-agent strategy debate orchestration —
 │       │                  backs the WarCouncil tab (per-agent Sonnet
 │       │                  calls + cached company/question prefix)
@@ -217,7 +222,7 @@ Decision 8 overturned: unified single-service deploy".
 
 | | Phase 1 ✅ shipped | Phase 2 (queued) |
 |---|---|---|
-| **CRUD** | Objectives + KRs full CRUD; KnowledgeDomain PATCH; everything else read-only | Project / Decision / KnowledgeSource writes |
+| **CRUD** | Objectives + KRs, RoutingRules, Projects, Decisions, KnowledgeSources all full CRUD with audit emissions; KnowledgeDomain PATCH | Ingest-queue → KnowledgeSource promotion |
 | **AI** | `/api/v1/chat` (Sonnet 4.6) + `/api/v1/strategy-questions/{id}/debate` (multi-agent Sonnet) + `/api/v1/route` (Haiku 4.5 classifier). All use prompt caching and soft-fall to demo output when key missing. | Streaming responses; agent self-reflection / disagreement loops |
 | **RAG** | None | pgvector + document parser + embedding service |
 | **Auth** | None (public Cloud Run) | `X-User-Id` header → real OAuth / JWT |
