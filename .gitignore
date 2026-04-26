@@ -25,3 +25,12 @@ dist-ssr
 
 # Personal Claude Code settings (per-developer overrides)
 .claude/settings.local.json
+
+# Python (apps/api)
+__pycache__
+*.py[cod]
+*.egg-info
+.venv
+.pytest_cache
+.ruff_cache
+apps/api/.data

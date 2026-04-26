@@ -1,0 +1,13 @@
+# Velocity API — runtime deps
+# Pinned to specific minor versions; loose patch range is fine via ~=.
+fastapi~=0.115.0
+uvicorn[standard]~=0.32.0
+pydantic~=2.9.0
+pydantic-settings~=2.6.0
+SQLAlchemy~=2.0.36
+# Postgres driver: only loaded when DATABASE_URL points at postgres://. SQLite
+# (the dev default) uses the stdlib's sqlite3.
+psycopg[binary]~=3.2.0
+# Anthropic SDK is a Phase-1 dependency so the wiring is in place; no calls
+# happen yet. With prompt caching enabled when Phase 2 lands.
+anthropic~=0.39.0
