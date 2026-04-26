@@ -1,8 +1,49 @@
-import React from "react";
-import { Icon, KpiCard, HealthPill } from "../components/primitives.jsx";
-import { Departments } from "../data/seed.js";
+import React, { useState, useMemo } from "react";
+import { Icon, KpiCard, HealthPill, Modal, ConfirmModal, makeId } from "../components/primitives.jsx";
+import { Departments, AssistantRoutingRules, ROUTE_PRIORITIES, SkillPacks, AuditLog, AUDIT_CATEGORIES } from "../data/seed.js";
+
+const ROLE_OPTIONS = [
+  { v: "ceo",   label: "CEO" },
+  { v: "vp",    label: "VP" },
+  { v: "lead",  label: "Lead" },
+  { v: "staff", label: "Staff" }
+];
 
 export function AssistantsPage({ setRoute }) {
+  const [rules, setRules] = useState(() => AssistantRoutingRules.map(r => ({ ...r })));
+  const [editing, setEditing] = useState(null);
+  const [confirm, setConfirm] = useState(null);
+
+  function save(next) {
+    setRules(prev => {
+      const i = prev.findIndex(r => r.id === next.id);
+      if (i === -1) return [next, ...prev];
+      const cp = prev.slice(); cp[i] = next; return cp;
+    });
+    setEditing(null);
+  }
+  function del(id) { setRules(prev => prev.filter(r => r.id !== id)); setConfirm(null); }
+  function move(id, delta) {
+    setRules(prev => {
+      const i = prev.indexOf(prev.find(r => r.id === id));
+      const j = i + delta;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const cp = prev.slice(); [cp[i], cp[j]] = [cp[j], cp[i]]; return cp;
+    });
+  }
+  function toggleEnabled(id) {
+    setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
+  }
+  function onNew() {
+    setEditing({
+      id: makeId("rt"),
+      priority: "medium", enabled: true,
+      intent: "", targetDept: Departments[0]?.id || "",
+      targetSkill: null, permission: "vp,lead,staff",
+      note: "", hits: 0, lastHit: "—",
+      __isNew: true
+    });
+  }
   return (
     <div className="content fade-in">
       <div className="page-head">
@@ -37,8 +78,79 @@ export function AssistantsPage({ setRoute }) {
         ))}
       </div>
 
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card__head">
+          <div className="card__title"><Icon.GitBranch size={14} /> 意图路由规则 ({rules.length})</div>
+          <div className="row" style={{ gap: 6 }}>
+            <span style={{ fontSize: 11, color: "var(--fg3)" }}>按优先级从上到下匹配,首条命中即停止</span>
+            <button className="btn btn--primary btn--sm" onClick={onNew}><Icon.Plus size={13} /> 新增规则</button>
+          </div>
+        </div>
+        <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+          <thead style={{ background: "var(--slate-50)" }}>
+            <tr style={{ textAlign: "left" }}>
+              {["#", "启用", "优先级", "意图模式", "目标部门", "默认 Skill", "权限", "命中", ""].map((h, i) => (
+                <th key={i} style={{ padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rules.map((r, idx) => {
+              const dept = Departments.find(d => d.id === r.targetDept);
+              const skill = r.targetSkill ? SkillPacks.find(s => s.id === r.targetSkill) : null;
+              const pri = ROUTE_PRIORITIES.find(p => p.v === r.priority) || ROUTE_PRIORITIES[1];
+              return (
+                <tr key={r.id} style={{ borderTop: "1px solid var(--border-soft)", opacity: r.enabled ? 1 : 0.5 }}>
+                  <td style={{ padding: "10px 14px", color: "var(--fg3)" }}>
+                    <div className="row" style={{ gap: 4 }}>
+                      <span className="num">{idx + 1}</span>
+                      <button className="icon-btn" style={{ width: 18, height: 18 }} onClick={() => move(r.id, -1)} disabled={idx === 0} title="上移"><Icon.ArrowRight size={10} style={{ transform: "rotate(-90deg)" }} /></button>
+                      <button className="icon-btn" style={{ width: 18, height: 18 }} onClick={() => move(r.id, 1)} disabled={idx === rules.length - 1} title="下移"><Icon.ArrowRight size={10} style={{ transform: "rotate(90deg)" }} /></button>
+                    </div>
+                  </td>
+                  <td style={{ padding: "10px 14px" }}>
+                    <button className={`pill ${r.enabled ? "pill--ok" : "pill--neutral"}`} style={{ cursor: "pointer", border: "none" }} onClick={() => toggleEnabled(r.id)}>
+                      {r.enabled ? "启用" : "已停用"}
+                    </button>
+                  </td>
+                  <td style={{ padding: "10px 14px" }}>
+                    <span className="pill" style={{ background: pri.color + "20", color: pri.color, fontWeight: 600 }}>{pri.label}</span>
+                  </td>
+                  <td style={{ padding: "10px 14px" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg1)" }}>{r.intent || <span style={{ color: "var(--fg4)", fontWeight: 500 }}>未配置</span>}</div>
+                    {r.note && <div style={{ fontSize: 11, color: "var(--fg3)", marginTop: 2 }}>{r.note}</div>}
+                  </td>
+                  <td style={{ padding: "10px 14px" }}>
+                    {dept ? <span className="pill pill--info">{dept.name}</span> : r.targetDept === "platform" ? <span className="pill pill--indigo">平台基础</span> : "—"}
+                  </td>
+                  <td style={{ padding: "10px 14px" }}>
+                    {skill ? <span className="pill pill--neutral"><Icon.Sparkles size={10} /> {skill.name}</span> : <span style={{ fontSize: 11, color: "var(--fg4)" }}>默认助手</span>}
+                  </td>
+                  <td style={{ padding: "10px 14px" }}>
+                    <span className="num" style={{ fontSize: 11, color: "var(--fg3)" }}>{r.permission}</span>
+                  </td>
+                  <td style={{ padding: "10px 14px" }}>
+                    <div className="num" style={{ fontSize: 13, color: "var(--fg1)", fontWeight: 600 }}>{r.hits}</div>
+                    <div style={{ fontSize: 11, color: "var(--fg4)" }}>{r.lastHit}</div>
+                  </td>
+                  <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
+                    <div className="row-actions">
+                      <button className="icon-btn" title="编辑" onClick={() => setEditing({ ...r })}><Icon.Edit size={13} /></button>
+                      <button className="icon-btn icon-btn--danger" title="删除" onClick={() => setConfirm({ r })}><Icon.Trash size={13} /></button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {rules.length === 0 && (
+              <tr><td colSpan={9} style={{ padding: 36, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>暂无规则 — <a onClick={onNew} style={{ color: "var(--vel-indigo)", cursor: "pointer", textDecoration: "underline" }}>新增第一条</a></td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
       <div className="card">
-        <div className="card__head"><div className="card__title"><Icon.GitBranch size={14} /> 意图路由 · 最近 24 小时</div></div>
+        <div className="card__head"><div className="card__title"><Icon.Activity size={14} /> 意图路由 · 最近 24 小时</div></div>
         <div style={{ padding: 22 }}>
           <div style={{ fontSize: 12, color: "var(--fg3)", marginBottom: 12 }}>用户提问 → 部门识别 → 技能匹配 → 知识检索 → 回答。下面是今日实际路由案例:</div>
           {[
@@ -57,7 +169,107 @@ export function AssistantsPage({ setRoute }) {
           ))}
         </div>
       </div>
+
+      {editing && (
+        <RoutingRuleEditor
+          rule={editing}
+          onChange={setEditing}
+          onClose={() => setEditing(null)}
+          onSave={() => save(editing)}
+        />
+      )}
+      {confirm && (
+        <ConfirmModal
+          title="删除路由规则?"
+          body={<>该规则将不再参与意图匹配,历史命中记录保留在审计日志中。</>}
+          danger
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => del(confirm.r.id)}
+        />
+      )}
     </div>
+  );
+}
+
+function RoutingRuleEditor({ rule: r, onChange, onClose, onSave }) {
+  function set(k, v) { onChange({ ...r, [k]: v }); }
+  const valid = r.intent && r.intent.trim().length > 0;
+  const permRoles = (r.permission || "").split(",").map(s => s.trim()).filter(Boolean);
+  function togglePerm(role) {
+    const next = permRoles.includes(role) ? permRoles.filter(x => x !== role) : [...permRoles, role];
+    set("permission", next.join(","));
+  }
+
+  const parents = Departments.filter(d => !d.parentId);
+  const skillsForDept = SkillPacks.filter(s => s.dept === r.targetDept || s.scope === "platform" || s.scope === "company");
+
+  return (
+    <Modal
+      title={r.__isNew ? "新增意图路由规则" : "编辑意图路由规则"}
+      sub="规则按优先级从上到下匹配,首条命中即停止。意图模式留空表示 Fallback。"
+      large
+      onClose={onClose}
+      foot={<>
+        <button className="btn btn--ghost btn--sm" onClick={onClose}>取消</button>
+        <button className="btn btn--primary btn--sm" disabled={!valid} onClick={onSave} style={!valid ? { opacity: 0.5, cursor: "not-allowed" } : {}}>
+          <Icon.Save size={13} /> 保存
+        </button>
+      </>}
+    >
+      <div className="field">
+        <label className="field__label">意图模式 *</label>
+        <input className="input" value={r.intent} onChange={e => set("intent", e.target.value)} placeholder="例如:CMF / 材料 / 工艺 / 色彩 / 表面" />
+        <div className="field__hint" style={{ fontSize: 11, color: "var(--fg4)" }}>用 / 分隔关键词,任一命中即触发。生产环境会替换为分类器分数。</div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div className="field">
+          <label className="field__label">优先级</label>
+          <select className="select" value={r.priority} onChange={e => set("priority", e.target.value)}>
+            {ROUTE_PRIORITIES.map(p => <option key={p.v} value={p.v}>{p.label}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label className="field__label">启用</label>
+          <select className="select" value={r.enabled ? "y" : "n"} onChange={e => set("enabled", e.target.value === "y")}>
+            <option value="y">启用</option>
+            <option value="n">停用</option>
+          </select>
+        </div>
+        <div className="field">
+          <label className="field__label">目标部门</label>
+          <select className="select" value={r.targetDept} onChange={e => set("targetDept", e.target.value)}>
+            <option value="platform">平台基础</option>
+            {parents.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="field__label">默认 Skill (可选)</label>
+        <select className="select" value={r.targetSkill || ""} onChange={e => set("targetSkill", e.target.value || null)}>
+          <option value="">— 走默认部门助手 —</option>
+          {skillsForDept.map(s => <option key={s.id} value={s.id}>{s.name} ({s.scope})</option>)}
+        </select>
+      </div>
+
+      <div className="field">
+        <label className="field__label">允许调用的角色</label>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          {ROLE_OPTIONS.map(role => {
+            const sel = permRoles.includes(role.v);
+            return (
+              <button key={role.v} className={`btn btn--sm ${sel ? "btn--primary" : "btn--ghost"}`} onClick={() => togglePerm(role.v)}>{role.label}</button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="field__label">备注</label>
+        <textarea className="textarea" value={r.note || ""} onChange={e => set("note", e.target.value)} placeholder="可选 — 说明这条规则的设计意图。" />
+      </div>
+    </Modal>
   );
 }
 
@@ -136,6 +348,102 @@ export function GovernancePage() {
           </div>
         </div>
       </div>
+
+      <AuditLogPanel />
+    </div>
+  );
+}
+
+function AuditLogPanel() {
+  const [filterCat, setFilterCat] = useState("all");
+  const [filterSev, setFilterSev] = useState("all");
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(() => AuditLog.filter(e => {
+    if (filterCat !== "all" && e.category !== filterCat) return false;
+    if (filterSev !== "all" && e.severity !== filterSev) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      return e.action.toLowerCase().includes(q)
+        || e.target.toLowerCase().includes(q)
+        || e.actor.toLowerCase().includes(q);
+    }
+    return true;
+  }), [filterCat, filterSev, search]);
+
+  const sevMeta = {
+    info:   { cls: "pill--info",    label: "info" },
+    warn:   { cls: "pill--warn",    label: "warn" },
+    danger: { cls: "pill--danger",  label: "danger" }
+  };
+
+  return (
+    <div className="card" style={{ marginTop: 20 }}>
+      <div className="card__head">
+        <div className="card__title"><Icon.FileText size={14} /> 审计日志 ({filtered.length})</div>
+        <div className="row" style={{ gap: 8 }}>
+          <div className="topbar__search" style={{ width: 220, marginLeft: 0 }}>
+            <Icon.Search size={13} />
+            <input placeholder="按操作 / 对象 / 操作人搜索…" value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <button className="btn btn--ghost btn--sm"><Icon.Upload size={13} /> 导出 CSV</button>
+        </div>
+      </div>
+
+      <div style={{ padding: "10px 18px 0", borderBottom: "1px solid var(--border-soft)" }}>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          <button className={`btn btn--sm ${filterCat === "all" ? "btn--primary" : "btn--ghost"}`} onClick={() => setFilterCat("all")}>全部分类</button>
+          {AUDIT_CATEGORIES.map(c => (
+            <button
+              key={c.v}
+              className={`btn btn--sm ${filterCat === c.v ? "btn--primary" : "btn--ghost"}`}
+              style={filterCat === c.v ? { background: c.color, borderColor: c.color } : undefined}
+              onClick={() => setFilterCat(c.v)}
+            >{c.label}</button>
+          ))}
+        </div>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          <span style={{ fontSize: 11, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginRight: 6 }}>严重级别</span>
+          {[{ v: "all", label: "全部" }, { v: "info", label: "info" }, { v: "warn", label: "warn" }, { v: "danger", label: "danger" }].map(s => (
+            <button key={s.v} className={`btn btn--sm ${filterSev === s.v ? "btn--primary" : "btn--ghost"}`} onClick={() => setFilterSev(s.v)}>{s.label}</button>
+          ))}
+        </div>
+      </div>
+
+      <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+        <thead style={{ background: "var(--slate-50)" }}>
+          <tr style={{ textAlign: "left" }}>
+            {["时间", "操作人", "IP", "类别", "级别", "操作", "对象 / 范围"].map((h, i) => (
+              <th key={i} style={{ padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map(e => {
+            const cat = AUDIT_CATEGORIES.find(c => c.v === e.category) || AUDIT_CATEGORIES[0];
+            const sev = sevMeta[e.severity] || sevMeta.info;
+            return (
+              <tr key={e.id} style={{ borderTop: "1px solid var(--border-soft)" }}>
+                <td style={{ padding: "10px 14px", color: "var(--fg3)", fontFamily: "var(--font-mono)", fontSize: 12 }}>{e.at}</td>
+                <td style={{ padding: "10px 14px", color: "var(--fg1)", fontWeight: 600 }}>{e.actor}</td>
+                <td style={{ padding: "10px 14px", color: "var(--fg3)", fontFamily: "var(--font-mono)", fontSize: 12 }}>{e.ip}</td>
+                <td style={{ padding: "10px 14px" }}>
+                  <span className="pill" style={{ background: cat.color + "20", color: cat.color, fontWeight: 600 }}>{cat.label}</span>
+                </td>
+                <td style={{ padding: "10px 14px" }}><span className={`pill ${sev.cls}`}>{sev.label}</span></td>
+                <td style={{ padding: "10px 14px", color: "var(--fg1)" }}>{e.action}</td>
+                <td style={{ padding: "10px 14px", color: "var(--fg2)", fontSize: 12 }}>
+                  <div>{e.target}</div>
+                  <div style={{ fontSize: 11, color: "var(--fg4)" }}>{e.scope}</div>
+                </td>
+              </tr>
+            );
+          })}
+          {filtered.length === 0 && (
+            <tr><td colSpan={7} style={{ padding: 36, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>没有匹配的审计事件 — 调整筛选条件</td></tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }

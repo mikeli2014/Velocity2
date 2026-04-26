@@ -546,9 +546,54 @@ function ProjectsTable({ projects, onView, onEdit, onDelete, onNew }) {
 export function ProjectEditor({ project: p, objectives, onChange, onClose, onSave }) {
   function set(k, v) { onChange({ ...p, [k]: v }); }
   const valid = p.name.trim().length > 0;
+
+  // Milestones
+  const milestones = p.milestones || [];
+  function setMilestone(i, patch) {
+    const next = milestones.slice(); next[i] = { ...next[i], ...patch }; set("milestones", next);
+  }
+  function addMilestone() {
+    set("milestones", [...milestones, { id: makeId("m"), name: "", date: "", status: "todo" }]);
+  }
+  function delMilestone(i) {
+    set("milestones", milestones.filter((_, j) => j !== i));
+  }
+
+  // Risks
+  const risks = p.risksDetail || [];
+  function setRisk(i, patch) {
+    const next = risks.slice(); next[i] = { ...next[i], ...patch }; set("risksDetail", next);
+  }
+  function addRisk() {
+    set("risksDetail", [...risks, { id: makeId("r"), text: "", level: "warn", owner: "" }]);
+  }
+  function delRisk(i) {
+    set("risksDetail", risks.filter((_, j) => j !== i));
+  }
+
+  // Contributors (free-text chip list)
+  const contributors = p.contributors || [];
+  const [contribDraft, setContribDraft] = React.useState("");
+  function addContrib() {
+    const v = contribDraft.trim();
+    if (!v || contributors.includes(v)) { setContribDraft(""); return; }
+    set("contributors", [...contributors, v]); setContribDraft("");
+  }
+  function delContrib(name) {
+    set("contributors", contributors.filter(c => c !== name));
+  }
+
+  // Auto-rollup risks count from risksDetail (so the table badge stays in sync)
+  React.useEffect(() => {
+    if (risks.length !== p.risks) set("risks", risks.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [risks.length]);
+
   return (
     <Modal
       title={p.__isNew ? "新增关键项目" : "编辑关键项目"}
+      sub="项目编辑覆盖里程碑 / 风险 / 参与人。详情视图会同步显示。"
+      large
       onClose={onClose}
       foot={<>
         <button className="btn btn--ghost btn--sm" onClick={onClose}>取消</button>
@@ -561,14 +606,19 @@ export function ProjectEditor({ project: p, objectives, onChange, onClose, onSav
         <label className="field__label">项目名称 *</label>
         <input className="input" value={p.name} onChange={e => set("name", e.target.value)} placeholder="例如:全屋净水 2.0 — 局改方案产品化" />
       </div>
+      <div className="field">
+        <label className="field__label">项目描述</label>
+        <textarea className="textarea" value={p.description || ""} onChange={e => set("description", e.target.value)} placeholder="一句话描述项目目标 / 用户场景 / 核心交付。" />
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
         <div className="field">
           <label className="field__label">负责人</label>
-          <input className="input" value={p.owner} onChange={e => set("owner", e.target.value)} />
+          <input className="input" value={p.owner || ""} onChange={e => set("owner", e.target.value)} />
         </div>
         <div className="field">
           <label className="field__label">部门</label>
-          <input className="input" value={p.dept} onChange={e => set("dept", e.target.value)} />
+          <input className="input" value={p.dept || ""} onChange={e => set("dept", e.target.value)} />
         </div>
         <div className="field">
           <label className="field__label">关联 OKR</label>
@@ -577,17 +627,21 @@ export function ProjectEditor({ project: p, objectives, onChange, onClose, onSav
           </select>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
         <div className="field">
-          <label className="field__label">里程碑</label>
-          <input className="input" value={p.milestone} onChange={e => set("milestone", e.target.value)} />
+          <label className="field__label">当前里程碑</label>
+          <input className="input" value={p.milestone || ""} onChange={e => set("milestone", e.target.value)} placeholder="例如:样机评审" />
+        </div>
+        <div className="field">
+          <label className="field__label">启动日期</label>
+          <input className="input" type="date" value={p.started || ""} onChange={e => set("started", e.target.value)} />
         </div>
         <div className="field">
           <label className="field__label">截止日期</label>
           <input className="input" type="date" value={p.due} onChange={e => set("due", e.target.value)} />
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 12 }}>
         <div className="field">
           <label className="field__label">健康度</label>
           <select className="select" value={p.health} onChange={e => set("health", e.target.value)}>
@@ -598,9 +652,80 @@ export function ProjectEditor({ project: p, objectives, onChange, onClose, onSav
           <label className="field__label">进度 ({p.progress}%)</label>
           <input type="range" min="0" max="100" value={p.progress} onChange={e => set("progress", Number(e.target.value))} />
         </div>
-        <div className="field">
-          <label className="field__label">风险数</label>
-          <input className="input num" type="number" min="0" value={p.risks} onChange={e => set("risks", Number(e.target.value))} />
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <Icon.Calendar size={14} style={{ color: "var(--vel-indigo)" }} />
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>里程碑 ({milestones.length})</div>
+          </div>
+          <button className="btn btn--ghost btn--sm" onClick={addMilestone}><Icon.Plus size={12} /> 添加</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {milestones.map((m, i) => (
+            <div key={m.id} style={{ display: "grid", gridTemplateColumns: "1fr 130px 110px 28px", gap: 8, alignItems: "center" }}>
+              <input className="input" value={m.name} onChange={e => setMilestone(i, { name: e.target.value })} placeholder="里程碑名称" />
+              <input className="input" type="date" value={m.date || ""} onChange={e => setMilestone(i, { date: e.target.value })} />
+              <select className="select" value={m.status} onChange={e => setMilestone(i, { status: e.target.value })}>
+                <option value="todo">未开始</option>
+                <option value="in-progress">进行中</option>
+                <option value="achieved">已完成</option>
+              </select>
+              <button className="icon-btn icon-btn--danger" onClick={() => delMilestone(i)}><Icon.Trash size={13} /></button>
+            </div>
+          ))}
+          {milestones.length === 0 && <div style={{ fontSize: 12, color: "var(--fg4)", padding: "8px 0" }}>尚未添加里程碑</div>}
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <Icon.AlertTriangle size={14} style={{ color: "var(--warning)" }} />
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>风险登记 ({risks.length})</div>
+          </div>
+          <button className="btn btn--ghost btn--sm" onClick={addRisk}><Icon.Plus size={12} /> 添加</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {risks.map((r, i) => (
+            <div key={r.id} style={{ display: "grid", gridTemplateColumns: "1fr 110px 130px 28px", gap: 8, alignItems: "center" }}>
+              <input className="input" value={r.text} onChange={e => setRisk(i, { text: e.target.value })} placeholder="风险描述" />
+              <select className="select" value={r.level} onChange={e => setRisk(i, { level: e.target.value })}>
+                <option value="info">信息</option>
+                <option value="warn">中</option>
+                <option value="danger">高</option>
+              </select>
+              <input className="input" value={r.owner || ""} onChange={e => setRisk(i, { owner: e.target.value })} placeholder="负责人" />
+              <button className="icon-btn icon-btn--danger" onClick={() => delRisk(i)}><Icon.Trash size={13} /></button>
+            </div>
+          ))}
+          {risks.length === 0 && <div style={{ fontSize: 12, color: "var(--fg4)", padding: "8px 0" }}>无登记风险</div>}
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+          <Icon.Users size={14} style={{ color: "var(--vel-violet)" }} />
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>参与人 ({contributors.length})</div>
+        </div>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+          {contributors.map(c => (
+            <span key={c} className="pill pill--neutral" style={{ paddingRight: 4 }}>
+              <Icon.User size={11} /> {c}
+              <button className="icon-btn" style={{ width: 20, height: 20 }} onClick={() => delContrib(c)} title="移除"><Icon.X size={11} /></button>
+            </span>
+          ))}
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <input
+            className="input"
+            value={contribDraft}
+            onChange={e => setContribDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addContrib(); } }}
+            placeholder="输入姓名后回车添加"
+          />
+          <button className="btn btn--ghost btn--sm" onClick={addContrib}><Icon.Plus size={12} /> 添加</button>
         </div>
       </div>
     </Modal>

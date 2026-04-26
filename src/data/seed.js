@@ -227,6 +227,112 @@ export const KnowledgeSources = [
     tags: ["零冷水", "技术路线", "即热", "X系列"], pages: 36, lang: "zh-CN", uploadedBy: "孙阳", linkedProjects: ["proj-3"], linkedDecisions: [], embeddings: 168 }
 ];
 
+// =============== Assistant Routing Rules =================================
+// Priority-ordered rules used by the routing layer to map a user prompt
+// onto a department + skill. The first matching rule wins. Patterns are
+// kept as plain "中文 keyword" strings for the demo; production would use
+// regex / classifier scores.
+export const ROUTE_PRIORITIES = [
+  { v: "high",   label: "高",  color: "#ef4444" },
+  { v: "medium", label: "中",  color: "#f59e0b" },
+  { v: "low",    label: "低",  color: "#94a3b8" }
+];
+
+export const AssistantRoutingRules = [
+  {
+    id: "rt-1", priority: "high", enabled: true,
+    intent: "CMF / 材料 / 工艺 / 色彩 / 表面",
+    targetDept: "industrial-design", targetSkill: "sp-mat-search",
+    permission: "vp,lead,staff",
+    note: "工业设计部高频问询。命中后自动注入 CMF 与材料知识域。",
+    hits: 412, lastHit: "12 分钟前"
+  },
+  {
+    id: "rt-2", priority: "high", enabled: true,
+    intent: "竞品 / 奥维 / 价格带 / 品类报告",
+    targetDept: "industrial-design", targetSkill: "sp-aow",
+    permission: "vp,lead,staff",
+    note: "奥维品类问询统一走奥维分析技能,数据出处可追溯。",
+    hits: 134, lastHit: "1 小时前"
+  },
+  {
+    id: "rt-3", priority: "high", enabled: true,
+    intent: "工单 / 故障 / 投诉 / 维修",
+    targetDept: "service", targetSkill: "sp-fault-diag",
+    permission: "lead,staff",
+    note: "服务部一线 SOP — 命中后追加车型/故障代码槽位提取。",
+    hits: 1240, lastHit: "1 分钟前"
+  },
+  {
+    id: "rt-4", priority: "medium", enabled: true,
+    intent: "渠道 / BP / SC / SA / 价格异常 / 同价",
+    targetDept: "cop", targetSkill: "sp-price-anomaly",
+    permission: "vp,lead",
+    note: "渠道运营专属。仅 VP / 团队负责人可触发,避免一线误判。",
+    hits: 88, lastHit: "今早"
+  },
+  {
+    id: "rt-5", priority: "medium", enabled: true,
+    intent: "战略 / 决策 / OKR / 关键项目 / 反对意见",
+    targetDept: "platform", targetSkill: "sp-doc-search",
+    permission: "ceo,vp",
+    note: "战略级问题统一走战略助手 + 全局文档检索。",
+    hits: 264, lastHit: "今早 09:24"
+  },
+  {
+    id: "rt-6", priority: "medium", enabled: true,
+    intent: "会议 / 纪要 / 录音 / 转写",
+    targetDept: "platform", targetSkill: "sp-meeting-notes",
+    permission: "vp,lead,staff",
+    note: "全员可用。Skill Pack 自动关联到 OKR 与项目。",
+    hits: 1872, lastHit: "10 分钟前"
+  },
+  {
+    id: "rt-7", priority: "low", enabled: false,
+    intent: "动销 / 库存 / 补货 / 备货",
+    targetDept: "supply-chain", targetSkill: null,
+    permission: "vp,lead",
+    note: "供应链 Skill 仍在草稿,规则暂关。命中走默认部门助手。",
+    hits: 12, lastHit: "—"
+  },
+  {
+    id: "rt-8", priority: "low", enabled: true,
+    intent: "默认 (Fallback)",
+    targetDept: "platform", targetSkill: "sp-doc-search",
+    permission: "ceo,vp,lead,staff",
+    note: "未命中其他规则 — 走全公司文档检索 + 默认部门助手。",
+    hits: 3204, lastHit: "刚刚"
+  }
+];
+
+// =============== Audit Log =====================================
+// Human-readable audit events; a small but concrete sample so the
+// governance page reads like a real production log.
+export const AUDIT_CATEGORIES = [
+  { v: "auth",        label: "登录与权限",  color: "#4F46E5" },
+  { v: "knowledge",   label: "知识变更",    color: "#10b981" },
+  { v: "okr",         label: "OKR / 项目",  color: "#7c3aed" },
+  { v: "skill",       label: "Skill / 工作流", color: "#0EA5E9" },
+  { v: "assistant",   label: "助手 / 路由", color: "#EC4899" },
+  { v: "model",       label: "模型 / 计费", color: "#F59E0B" },
+  { v: "config",      label: "配置变更",    color: "#94a3b8" }
+];
+
+export const AuditLog = [
+  { id: "au-1", at: "2026-04-26 11:42", actor: "苏婉",   ip: "10.20.32.18",  category: "knowledge", severity: "info",   action: "上传 38 条 CMF 知识条目",    target: "知识域 · CMF (色彩材质工艺)", scope: "工业设计部" },
+  { id: "au-2", at: "2026-04-26 11:18", actor: "李慕白", ip: "10.20.32.41",  category: "okr",       severity: "info",   action: "运行 Skill — 设计简报生成",   target: "项目 · 全屋净水 2.0",         scope: "工业设计部" },
+  { id: "au-3", at: "2026-04-26 10:55", actor: "苏婉",   ip: "10.20.32.18",  category: "skill",     severity: "warn",   action: "工作流 CMF 可行性检查 进入审批等待", target: "工作流 · CMF 可行性检查",    scope: "CMF 中台" },
+  { id: "au-4", at: "2026-04-26 09:40", actor: "周岚",   ip: "10.40.55.7",   category: "assistant", severity: "info",   action: "更新意图路由规则",             target: "规则 · 渠道 / 价格异常",       scope: "渠道运营 (COP)" },
+  { id: "au-5", at: "2026-04-26 09:24", actor: "战略画布", ip: "—",          category: "assistant", severity: "info",   action: "完成第 3 轮多智能体研讨",       target: "战略问题 · DTC 渠道",          scope: "公司" },
+  { id: "au-6", at: "2026-04-26 09:10", actor: "陈思源", ip: "10.20.32.62",  category: "knowledge", severity: "info",   action: "标记一条 PVD 工艺答案为 不准确", target: "知识域 · 工艺",                scope: "工业设计部" },
+  { id: "au-7", at: "2026-04-26 08:50", actor: "Tomas 朱", ip: "10.10.4.2",  category: "config",    severity: "warn",   action: "下线模型 文心 4 Turbo (灾备)",  target: "模型 · ernie-4-turbo",         scope: "公司" },
+  { id: "au-8", at: "2026-04-26 08:15", actor: "Joyce 黄", ip: "10.30.10.14", category: "model",     severity: "info",   action: "切换 财务 / HR / 法务 走本地 LLaMA-70B", target: "路由策略 · 敏感数据",        scope: "公司" },
+  { id: "au-9", at: "2026-04-25 22:40", actor: "高翔",   ip: "10.40.55.18",  category: "okr",       severity: "warn",   action: "新增风险条目",                 target: "项目 · 县域服务网络重塑",     scope: "服务部 / 县域" },
+  { id: "au-10", at: "2026-04-25 18:02", actor: "陈志远", ip: "10.10.1.1",  category: "auth",      severity: "info",   action: "登录 (SSO · 企业微信)",         target: "—",                            scope: "公司" },
+  { id: "au-11", at: "2026-04-25 16:48", actor: "未知",  ip: "203.0.113.42", category: "auth",      severity: "danger", action: "外部 IP 尝试以 cop@partner 身份登录,被拦截", target: "—",                  scope: "外部" },
+  { id: "au-12", at: "2026-04-25 15:30", actor: "黄毅",  ip: "10.10.4.21",   category: "config",    severity: "info",   action: "工业设计部 助手 上线全员",     target: "部门 · 工业设计 / 小龙虾",     scope: "公司" }
+];
+
 // Recent check-in records (history) for KRs. Each entry = one update event.
 // progress is the value at that point in time, so the series is monotonic
 // per KR (modulo rare resets).
