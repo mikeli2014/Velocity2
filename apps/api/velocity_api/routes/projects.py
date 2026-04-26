@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..audit import emit_audit
+from ..auth import current_user
 from ..db import get_db
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
@@ -42,7 +43,11 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=schemas.ProjectOut, status_code=status.HTTP_201_CREATED)
-def create_project(payload: schemas.ProjectCreate, db: Session = Depends(get_db)):
+def create_project(
+    payload: schemas.ProjectCreate,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_user),
+):
     project_id = payload.id or schemas.make_id("proj")
     if db.get(models.Project, project_id) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="project_id_taken")
@@ -59,6 +64,7 @@ def create_project(payload: schemas.ProjectCreate, db: Session = Depends(get_db)
         action="新增项目",
         target=payload.name,
         scope=payload.dept_id,
+        actor=actor,
         link={"page": "okr", "projectId": project_id},
     )
     db.commit()
@@ -71,6 +77,7 @@ def update_project(
     project_id: str,
     payload: schemas.ProjectUpdate,
     db: Session = Depends(get_db),
+    actor: str = Depends(current_user),
 ):
     row = db.get(models.Project, project_id)
     if row is None:
@@ -86,6 +93,7 @@ def update_project(
         action="更新项目",
         target=row.name,
         scope=row.dept_id,
+        actor=actor,
         link={"page": "okr", "projectId": project_id},
     )
     db.commit()
@@ -94,7 +102,11 @@ def update_project(
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_project(project_id: str, db: Session = Depends(get_db)):
+def delete_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_user),
+):
     row = db.get(models.Project, project_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="project_not_found")
@@ -108,6 +120,7 @@ def delete_project(project_id: str, db: Session = Depends(get_db)):
         action="删除项目",
         target=name,
         scope=dept_id,
+        actor=actor,
     )
     db.commit()
     return None

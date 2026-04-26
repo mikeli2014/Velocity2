@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Icon, KpiCard, Progress, HealthPill, Modal } from "../components/primitives.jsx";
 import { Company, KnowledgeSources as SeedKnowledgeSources, KnowledgeDomains as SeedKnowledgeDomains, Projects, DecisionsRich, IngestQueueItems, INGEST_STATES } from "../data/seed.js";
-import { useApi } from "../lib/api.js";
+import { useApi, apiPost, ApiError } from "../lib/api.js";
 
 export function KnowledgePage() {
   const [tab, setTab] = useState("sources");
@@ -20,12 +20,30 @@ export function KnowledgePage() {
   // Domains tab also reads from the API.
   const { data: apiDomains } = useApi("/api/v1/knowledge-domains");
   const KnowledgeDomains = apiDomains ?? SeedKnowledgeDomains;
+  const { refresh: refreshSources } = useApi("/api/v1/knowledge-sources");
 
   function pushIngestItem(it) {
     setIngestItems(prev => [it, ...prev]);
   }
   function patchIngestItem(id, patch) {
     setIngestItems(prev => prev.map(it => it.id === id ? { ...it, ...patch } : it));
+  }
+  // Approve = "知识源入库": POST /ingest-queue/{id}/approve flips the
+  // queue item to approved AND mints a real KnowledgeSource row. We
+  // optimistically apply the state flip locally and refresh sources on
+  // success; soft-fall to local-only on failure (offline / no backend).
+  async function approveIngestItem(id) {
+    patchIngestItem(id, { state: "approved", progress: 100 });
+    try {
+      await apiPost(`/api/v1/ingest-queue/${id}/approve`);
+      refreshSources();
+    } catch (err) {
+      const detail = err instanceof ApiError ? err.detail : String(err);
+      // 409 already-approved is benign — backend just enforces idempotency.
+      if (detail !== "ingest_item_already_approved") {
+        console.warn("[velocity] ingest approve failed; keeping local-only", err);
+      }
+    }
   }
 
   return (
@@ -148,6 +166,7 @@ export function KnowledgePage() {
         <IngestQueue
           items={ingestItems}
           onPatch={patchIngestItem}
+          onApprove={approveIngestItem}
         />
       )}
       {tab === "feedback" && <FeedbackPanel />}
@@ -483,11 +502,11 @@ function KnowledgeGraph() {
   );
 }
 
-function IngestQueue({ items, onPatch }) {
+function IngestQueue({ items, onPatch, onApprove }) {
   const [filter, setFilter] = useState("all");
   const update = onPatch;
 
-  function approve(id) { update(id, { state: "approved", progress: 100 }); }
+  function approve(id) { onApprove ? onApprove(id) : update(id, { state: "approved", progress: 100 }); }
   function reject(id)  { update(id, { state: "rejected" }); }
   function retry(id)   { update(id, { state: "fetching", progress: 5, error: null }); }
 

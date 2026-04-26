@@ -132,3 +132,39 @@ def test_synthesis_stream_no_messages_400(client, stream_captured):
     # sq-5 has no debate messages — the prompt builder rejects.
     res = client.post("/api/v1/strategy-questions/sq-5/debate/synthesis/stream")
     assert res.status_code == 400
+
+
+def test_debate_round_stream_per_agent_events(client, stream_captured):
+    # sq-2 has 5 agents in seed and no prior rounds.
+    res = client.post(
+        "/api/v1/strategy-questions/sq-2/debate/round/stream",
+        json={},
+    )
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("text/event-stream")
+    events = _parse_sse(res.content)
+
+    # First event lays out the round + agents.
+    assert events[0]["type"] == "round"
+    assert events[0]["round"] == 1
+    assert len(events[0]["agents"]) == 5
+    # Each agent sends start → text* → done; final event is done.
+    starts = [e for e in events if e["type"] == "agent_start"]
+    dones = [e for e in events if e["type"] == "agent_done"]
+    texts = [e for e in events if e["type"] == "text"]
+    assert len(starts) == 5
+    assert len(dones) == 5
+    # Every text event carries the agentId so the frontend can route it.
+    assert all("agentId" in t for t in texts)
+    assert events[-1]["type"] == "done"
+    assert events[-1]["round"] == 1
+
+    # Persisted: a follow-up GET surfaces the new round.
+    listed = client.get("/api/v1/strategy-questions/sq-2/debate").json()
+    assert any(r["round"] == 1 for r in listed)
+
+
+def test_debate_round_stream_no_key_503(client, monkeypatch):
+    monkeypatch.setattr(chat_route, "_get_anthropic_client", lambda: None)
+    res = client.post("/api/v1/strategy-questions/sq-1/debate/round/stream", json={})
+    assert res.status_code == 503

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..audit import emit_audit as _emit_audit
+from ..auth import current_user
 from ..db import get_db
 
 router = APIRouter(prefix="/api/v1", tags=["inbox"])
@@ -59,6 +60,78 @@ def patch_ingest_item(item_id: str, payload: schemas.IngestQueuePatch, db: Sessi
     db.commit()
     db.refresh(row)
     return schemas.IngestQueueItemOut.model_validate(row)
+
+
+@router.post(
+    "/ingest-queue/{item_id}/approve",
+    response_model=schemas.IngestApproveResult,
+    status_code=status.HTTP_201_CREATED,
+)
+def approve_ingest_item(
+    item_id: str,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_user),
+):
+    """Promote a queued ingest item into a real ``KnowledgeSource``.
+
+    Idempotent in spirit: re-approving an already-approved item returns
+    the same source row (we tag it onto ``ingest_item.error`` slot —
+    abused as a free string column for the demo). For now we simplify
+    and reject re-approval with 409 so the flow is unambiguous.
+    """
+    item = db.get(models.IngestQueueItem, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="ingest_item_not_found")
+    if item.state == "approved":
+        raise HTTPException(status_code=409, detail="ingest_item_already_approved")
+    if item.state == "rejected":
+        raise HTTPException(status_code=409, detail="ingest_item_rejected")
+
+    source_id = schemas.make_id("ks")
+    source = models.KnowledgeSource(
+        id=source_id,
+        title=item.name,
+        type=item.type,
+        scope=item.scope,
+        quality="draft",
+        uses=0,
+        owner=item.owner,
+        updated="刚刚",
+        size=item.size,
+        summary=None,
+        excerpt=None,
+        tags=[],
+        pages=None,
+        lang=None,
+        uploaded_by=actor,
+        embeddings=0,
+        linked_projects=[],
+        linked_decisions=[],
+    )
+    db.add(source)
+
+    # Flip the queue item to approved + 100% so the review tab clears.
+    item.state = "approved"
+    item.progress = 100
+    item.error = None
+
+    _emit_audit(
+        db,
+        category="knowledge",
+        severity="info",
+        action="知识源入库",
+        target=item.name,
+        scope=item.scope,
+        actor=actor,
+        link={"page": "knowledge", "sourceId": source_id, "queueId": item_id},
+    )
+    db.commit()
+    db.refresh(item)
+    db.refresh(source)
+    return schemas.IngestApproveResult(
+        item=schemas.IngestQueueItemOut.model_validate(item),
+        source=schemas.KnowledgeSourceOut.model_validate(source),
+    )
 
 
 # --- Notifications ------------------------------------------------------
@@ -111,7 +184,11 @@ def list_routing_rules(db: Session = Depends(get_db)):
     response_model=schemas.RoutingRuleOut,
     status_code=status.HTTP_201_CREATED,
 )
-def create_routing_rule(payload: schemas.RoutingRuleCreate, db: Session = Depends(get_db)):
+def create_routing_rule(
+    payload: schemas.RoutingRuleCreate,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_user),
+):
     rule_id = payload.id or schemas.make_id("rt")
     if db.get(models.RoutingRule, rule_id) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="routing_rule_id_taken")
@@ -136,6 +213,7 @@ def create_routing_rule(payload: schemas.RoutingRuleCreate, db: Session = Depend
         action="新增路由规则",
         target=payload.intent,
         scope=payload.target_dept,
+        actor=actor,
         link={"page": "assistants", "ruleId": rule_id},
     )
     db.commit()
@@ -148,6 +226,7 @@ def update_routing_rule(
     rule_id: str,
     payload: schemas.RoutingRuleUpdate,
     db: Session = Depends(get_db),
+    actor: str = Depends(current_user),
 ):
     row = db.get(models.RoutingRule, rule_id)
     if row is None:
@@ -176,6 +255,7 @@ def update_routing_rule(
         action=action,
         target=row.intent,
         scope=row.target_dept,
+        actor=actor,
         link={"page": "assistants", "ruleId": row.id},
     )
     db.commit()
@@ -184,7 +264,11 @@ def update_routing_rule(
 
 
 @router.delete("/routing-rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_routing_rule(rule_id: str, db: Session = Depends(get_db)):
+def delete_routing_rule(
+    rule_id: str,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_user),
+):
     row = db.get(models.RoutingRule, rule_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="routing_rule_not_found")
@@ -198,6 +282,7 @@ def delete_routing_rule(rule_id: str, db: Session = Depends(get_db)):
         action="删除路由规则",
         target=intent,
         scope=target_dept,
+        actor=actor,
         # No deep-link target after delete — keep the link slot null.
     )
     db.commit()

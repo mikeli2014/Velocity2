@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Icon, Modal, makeId } from "../components/primitives.jsx";
 import { StrategyQuestion, StrategyQuestions, STRATEGY_STATUSES, Agents, DebateMessages as SeedDebateMessages, KnowledgeSources, Objectives } from "../data/seed.js";
-import { useApi, apiPost, apiStream, ApiError } from "../lib/api.js";
+import { useApi, apiStream, ApiError } from "../lib/api.js";
 
 export function StrategyPage() {
   const [tab, setTab] = useState("canvas");
@@ -543,21 +543,48 @@ function WarCouncil({ questionId }) {
   const [synth, setSynth] = useState(null);
   const [synthLoading, setSynthLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Live state during a streaming round: agents currently in flight,
+  // and per-agent buffered text so each avatar lights up + types in
+  // real-time. Cleared on done.
+  const [liveRound, setLiveRound] = useState(null);
 
-  async function runRound() {
+  function runRound() {
     if (running) return;
     setRunning(true);
     setError(null);
-    try {
-      await apiPost(`/api/v1/strategy-questions/${questionId}/debate/round`, {});
-      // Synthesis goes stale once new messages land.
-      setSynth(null);
-      refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.detail : String(err));
-    } finally {
-      setRunning(false);
-    }
+    setLiveRound({ round: null, current: null, buffers: {} });
+    apiStream(`/api/v1/strategy-questions/${questionId}/debate/round/stream`, {}, {
+      onEvent: (ev) => {
+        if (ev.type === "round") {
+          setLiveRound(s => ({ ...(s || {}), round: ev.round, agents: ev.agents }));
+        } else if (ev.type === "agent_start") {
+          setLiveRound(s => ({ ...(s || {}), current: ev.agentId }));
+        } else if (ev.type === "text") {
+          setLiveRound(s => ({
+            ...(s || {}),
+            buffers: { ...(s?.buffers || {}), [ev.agentId]: ((s?.buffers || {})[ev.agentId] || "") + ev.text }
+          }));
+        } else if (ev.type === "agent_done") {
+          // Persisted message; let the periodic refresh below pick it up.
+          // Keep the buffered text visible until the round ends so the
+          // user sees the same content settle in place.
+        } else if (ev.type === "done") {
+          setSynth(null);  // synthesis goes stale once new messages land
+          setLiveRound(null);
+          setRunning(false);
+          refresh();
+        } else if (ev.type === "error") {
+          setError(ev.detail);
+          setLiveRound(null);
+          setRunning(false);
+        }
+      },
+      onError: (err) => {
+        setError(err instanceof ApiError ? err.detail : String(err));
+        setLiveRound(null);
+        setRunning(false);
+      }
+    });
   }
 
   function runSynthesis() {
@@ -676,6 +703,41 @@ function WarCouncil({ questionId }) {
               })}
             </div>
           ))}
+          {liveRound && liveRound.agents && (
+            <div>
+              <div style={{ fontSize: 11, color: "rgba(196,181,253,0.7)", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700, padding: "16px 0 10px", borderBottom: "1px solid rgba(196,181,253,0.18)", marginBottom: 12 }}>
+                第 {liveRound.round} 轮 · 进行中
+              </div>
+              {liveRound.agents.map(p => {
+                const inFlight = liveRound.current === p.id;
+                const buf = (liveRound.buffers || {})[p.id] || "";
+                const arrived = buf.length > 0;
+                return (
+                  <div key={p.id} style={{ display: "flex", gap: 14, marginBottom: 16, opacity: arrived || inFlight ? 1 : 0.4 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 10, background: p.color || "#7c3aed", color: "#fff", display: "grid", placeItems: "center", flexShrink: 0, boxShadow: inFlight ? "0 0 0 4px rgba(196,181,253,0.35)" : "none" }}>
+                      {React.createElement(Icon[p.icon] || Icon.User, { size: 17 })}
+                    </div>
+                    <div style={{ flex: 1, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: 16 }}>
+                      <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+                        <div className="row" style={{ gap: 8 }}>
+                          <span style={{ fontWeight: 700, fontSize: 13, color: "#fff" }}>{p.name}</span>
+                          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{p.role}</span>
+                        </div>
+                        {inFlight && <span style={{ fontSize: 11, color: "#c4b5fd" }}>思考中…</span>}
+                        {!inFlight && !arrived && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>等待</span>}
+                      </div>
+                      <div style={{ fontSize: 13.5, color: "rgba(255,255,255,0.88)", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
+                        {buf}
+                        {inFlight && (
+                          <span style={{ display: "inline-block", width: 7, height: 13, background: "#c4b5fd", marginLeft: 4, verticalAlign: "-2px", animation: "blink 1s steps(2,start) infinite" }} />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div style={{ marginTop: 24, padding: 18, background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 12 }}>
           <div className="row" style={{ gap: 10, marginBottom: 8 }}>

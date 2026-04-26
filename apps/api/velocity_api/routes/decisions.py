@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..audit import emit_audit
+from ..auth import current_user
 from ..db import get_db
 
 router = APIRouter(prefix="/api/v1/decisions", tags=["decisions"])
@@ -31,7 +32,11 @@ def get_decision(decision_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=schemas.DecisionOut, status_code=status.HTTP_201_CREATED)
-def create_decision(payload: schemas.DecisionCreate, db: Session = Depends(get_db)):
+def create_decision(
+    payload: schemas.DecisionCreate,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_user),
+):
     decision_id = payload.id or schemas.make_id("d")
     if db.get(models.Decision, decision_id) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="decision_id_taken")
@@ -47,6 +52,7 @@ def create_decision(payload: schemas.DecisionCreate, db: Session = Depends(get_d
         severity="info",
         action="新增决策",
         target=payload.title,
+        actor=actor,
         link={"page": "okr", "decisionId": decision_id},
     )
     db.commit()
@@ -59,6 +65,7 @@ def update_decision(
     decision_id: str,
     payload: schemas.DecisionUpdate,
     db: Session = Depends(get_db),
+    actor: str = Depends(current_user),
 ):
     row = db.get(models.Decision, decision_id)
     if row is None:
@@ -73,6 +80,7 @@ def update_decision(
         severity="info",
         action="更新决策",
         target=row.title,
+        actor=actor,
         link={"page": "okr", "decisionId": decision_id},
     )
     db.commit()
@@ -81,7 +89,11 @@ def update_decision(
 
 
 @router.delete("/{decision_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_decision(decision_id: str, db: Session = Depends(get_db)):
+def delete_decision(
+    decision_id: str,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_user),
+):
     row = db.get(models.Decision, decision_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="decision_not_found")
@@ -93,6 +105,7 @@ def delete_decision(decision_id: str, db: Session = Depends(get_db)):
         severity="warning",
         action="删除决策",
         target=title,
+        actor=actor,
     )
     db.commit()
     return None

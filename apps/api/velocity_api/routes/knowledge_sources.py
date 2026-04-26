@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..audit import emit_audit
+from ..auth import current_user
 from ..db import get_db
 
 router = APIRouter(prefix="/api/v1/knowledge-sources", tags=["knowledge"])
@@ -34,7 +35,11 @@ def get_knowledge_source(source_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=schemas.KnowledgeSourceOut, status_code=status.HTTP_201_CREATED)
-def create_knowledge_source(payload: schemas.KnowledgeSourceCreate, db: Session = Depends(get_db)):
+def create_knowledge_source(
+    payload: schemas.KnowledgeSourceCreate,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_user),
+):
     source_id = payload.id or schemas.make_id("ks")
     if db.get(models.KnowledgeSource, source_id) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="source_id_taken")
@@ -51,6 +56,7 @@ def create_knowledge_source(payload: schemas.KnowledgeSourceCreate, db: Session 
         action="新增知识源",
         target=payload.title,
         scope=payload.scope,
+        actor=actor,
         link={"page": "knowledge", "sourceId": source_id},
     )
     db.commit()
@@ -63,6 +69,7 @@ def update_knowledge_source(
     source_id: str,
     payload: schemas.KnowledgeSourceUpdate,
     db: Session = Depends(get_db),
+    actor: str = Depends(current_user),
 ):
     row = db.get(models.KnowledgeSource, source_id)
     if row is None:
@@ -78,6 +85,7 @@ def update_knowledge_source(
         action="更新知识源",
         target=row.title,
         scope=row.scope,
+        actor=actor,
         link={"page": "knowledge", "sourceId": source_id},
     )
     db.commit()
@@ -86,7 +94,11 @@ def update_knowledge_source(
 
 
 @router.delete("/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_knowledge_source(source_id: str, db: Session = Depends(get_db)):
+def delete_knowledge_source(
+    source_id: str,
+    db: Session = Depends(get_db),
+    actor: str = Depends(current_user),
+):
     row = db.get(models.KnowledgeSource, source_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="source_not_found")
@@ -100,6 +112,7 @@ def delete_knowledge_source(source_id: str, db: Session = Depends(get_db)):
         action="删除知识源",
         target=title,
         scope=scope,
+        actor=actor,
     )
     db.commit()
     return None

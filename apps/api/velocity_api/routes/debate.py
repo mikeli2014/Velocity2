@@ -29,12 +29,14 @@ Endpoints
 
 from __future__ import annotations
 
+import json
 import logging
 import re
-from typing import Any
+from typing import Any, Iterator
 
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
@@ -139,23 +141,26 @@ def list_debate(question_id: str, db: Session = Depends(get_db)):
     return [_to_out(r) for r in rows]
 
 
-@router.post(
-    "/{question_id}/debate/round",
-    response_model=schemas.DebateRoundOut,
-    status_code=status.HTTP_201_CREATED,
-)
-def run_debate_round(
+def _prepare_round(
+    db: Session,
     question_id: str,
     payload: schemas.DebateRoundIn,
-    db: Session = Depends(get_db),
-):
+) -> tuple[
+    models.StrategyQuestion,
+    list[models.Agent],
+    int,
+    str,
+    str,
+    str,
+    set[str],
+]:
+    """Shared prep for sync + streaming round endpoints. Returns
+    (question, agents, round_no, company_text, question_text,
+    transcript, valid_source_ids). Raises HTTPException on the same
+    validation failures both code paths share."""
     question = db.get(models.StrategyQuestion, question_id)
     if question is None:
         raise HTTPException(status_code=404, detail="question_not_found")
-
-    client = chat_module._get_anthropic_client()
-    if client is None:
-        raise HTTPException(status_code=503, detail="anthropic_not_configured")
 
     agent_ids = list(payload.agent_ids or question.agents or [])
     if not agent_ids:
@@ -168,7 +173,6 @@ def run_debate_round(
             raise HTTPException(status_code=400, detail=f"agent_not_found:{ag_id}")
         agents.append(ag)
 
-    # Determine round number — next after the highest existing.
     if payload.round is not None:
         round_no = max(1, payload.round)
     else:
@@ -180,7 +184,6 @@ def run_debate_round(
         )
         round_no = (last.round + 1) if last else 1
 
-    # Pull cited knowledge sources once — same set across all agents.
     sources: list[models.KnowledgeSource] = []
     for sid in question.context or []:
         s = db.get(models.KnowledgeSource, sid)
@@ -192,7 +195,6 @@ def run_debate_round(
     company_text = _company_block(company)
     question_text = _question_block(question, sources)
 
-    # Prior-rounds transcript (volatile — outside cache).
     prior_rows = (
         db.query(models.DebateMessage)
         .filter(models.DebateMessage.question_id == question_id)
@@ -207,29 +209,69 @@ def run_debate_round(
         transcript_lines.append(f"第 {row.round} 轮 · {ag_label}({row.stance}):{row.text}")
     transcript = "\n".join(transcript_lines) or "(本问题尚无历史发言)"
 
+    return question, agents, round_no, company_text, question_text, transcript, valid_source_ids
+
+
+def _round_kind(round_no: int) -> str:
+    return "首轮陈述" if round_no == 1 else "交叉质询" if round_no == 2 else "立场收敛"
+
+
+def _agent_call_args(
+    *,
+    agent: models.Agent,
+    company_text: str,
+    question_text: str,
+    transcript: str,
+    round_no: int,
+) -> tuple[list[dict[str, Any]], str]:
+    """Assemble the system blocks + user message for a single agent's
+    contribution. Cached prefix: company → question → agent persona; the
+    user turn (round + transcript) stays volatile."""
+    system_blocks = [
+        {"type": "text", "text": company_text, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": question_text, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": _agent_block(agent), "cache_control": {"type": "ephemeral"}},
+    ]
+    user_msg = (
+        f"现在是第 {round_no} 轮:{_round_kind(round_no)}。\n\n"
+        f"已有发言:\n{transcript}\n\n"
+        f"请以「{agent.name}」身份发表本轮意见。"
+        "记得用 [赞成]/[反对]/[保留] 开头,4 句话以内。"
+    )
+    return system_blocks, user_msg
+
+
+@router.post(
+    "/{question_id}/debate/round",
+    response_model=schemas.DebateRoundOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def run_debate_round(
+    question_id: str,
+    payload: schemas.DebateRoundIn,
+    db: Session = Depends(get_db),
+):
+    # Validate the question first so unknown ids 404 even when the
+    # backend has no API key configured (otherwise 503 masks 404).
+    question, agents, round_no, company_text, question_text, transcript, valid_source_ids = _prepare_round(
+        db, question_id, payload
+    )
+
+    client = chat_module._get_anthropic_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="anthropic_not_configured")
+
     new_rows: list[models.DebateMessage] = []
     used_model = DEFAULT_CHAT_MODEL
 
     for idx, agent in enumerate(agents):
-        # Cached prefix: company → question → agent persona. Per-agent
-        # persona stays at the END of the cached group so each agent's
-        # call is its own cache key (different last-block bytes ⇒
-        # distinct cache entries, but the company + question prefix is
-        # shared across all 7 calls in a round).
-        system_blocks: list[dict[str, Any]] = [
-            {"type": "text", "text": company_text, "cache_control": {"type": "ephemeral"}},
-            {"type": "text", "text": question_text, "cache_control": {"type": "ephemeral"}},
-            {"type": "text", "text": _agent_block(agent), "cache_control": {"type": "ephemeral"}},
-        ]
-        # Volatile per-call instruction — outside cache.
-        round_kind = "首轮陈述" if round_no == 1 else "交叉质询" if round_no == 2 else "立场收敛"
-        user_msg = (
-            f"现在是第 {round_no} 轮:{round_kind}。\n\n"
-            f"已有发言:\n{transcript}\n\n"
-            f"请以「{agent.name}」身份发表本轮意见。"
-            "记得用 [赞成]/[反对]/[保留] 开头,4 句话以内。"
+        system_blocks, user_msg = _agent_call_args(
+            agent=agent,
+            company_text=company_text,
+            question_text=question_text,
+            transcript=transcript,
+            round_no=round_no,
         )
-
         try:
             message = client.messages.create(
                 model=DEFAULT_CHAT_MODEL,
@@ -252,9 +294,8 @@ def run_debate_round(
         cited = _scrape_source_ids(body, valid_source_ids)
         used_model = getattr(message, "model", DEFAULT_CHAT_MODEL)
 
-        row_id = schemas.make_id("dm")
         row = models.DebateMessage(
-            id=row_id,
+            id=schemas.make_id("dm"),
             question_id=question_id,
             round=round_no,
             agent_id=agent.id,
@@ -266,7 +307,6 @@ def run_debate_round(
         db.add(row)
         new_rows.append(row)
 
-    # Bump the question's round counter for the registry display.
     question.rounds = max(question.rounds or 0, round_no)
     if question.status not in ("decided",):
         question.status = "in-debate"
@@ -276,6 +316,136 @@ def run_debate_round(
         db.refresh(r)
 
     return schemas.DebateRoundOut(round=round_no, messages=[_to_out(r) for r in new_rows])
+
+
+@router.post("/{question_id}/debate/round/stream")
+def run_debate_round_stream(
+    question_id: str,
+    payload: schemas.DebateRoundIn,
+    db: Session = Depends(get_db),
+):
+    """SSE variant of debate round.
+
+    Per-agent wire format:
+
+    - ``data: {"type":"round","round":N,"agents":[{id,name,role,color,icon}, ...]}``
+      — emitted once at the start so the WarCouncil panel can lay out
+      the agent slots before tokens arrive.
+    - ``data: {"type":"agent_start","agentId":"ag-..."}``
+    - ``data: {"type":"text","agentId":"ag-...","text":"chunk"}`` — N times
+    - ``data: {"type":"agent_done","agentId":"ag-...","message":{...DebateMessageOut}}``
+    - repeat for each agent
+    - ``data: {"type":"done","round":N}`` at the very end.
+
+    On Anthropic errors mid-stream, emit a single
+    ``{"type":"error","detail":"..."}`` event — the HTTP status is 200
+    by then so we can't go back.
+    """
+    # Validate the question first so unknown ids 404 (vs masking with 503).
+    question, agents, round_no, company_text, question_text, transcript, valid_source_ids = _prepare_round(
+        db, question_id, payload
+    )
+
+    client = chat_module._get_anthropic_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="anthropic_not_configured")
+
+    # Snapshot for the generator. We reuse the request's ``db`` session —
+    # FastAPI keeps generator-style Depends alive until the response body
+    # finishes streaming, which is exactly the lifetime we want.
+    question_id_snap = question_id
+    round_no_snap = round_no
+    valid_source_ids_snap = set(valid_source_ids)
+    agent_payloads = [
+        {
+            "id": a.id,
+            "name": a.name,
+            "role": a.role,
+            "color": a.color,
+            "icon": a.icon,
+            "_obj": a,
+        }
+        for a in agents
+    ]
+
+    def _gen() -> Iterator[bytes]:
+        wire_agents = [{k: v for k, v in p.items() if k != "_obj"} for p in agent_payloads]
+        yield chat_module._sse({"type": "round", "round": round_no_snap, "agents": wire_agents})
+
+        for p in agent_payloads:
+            agent = p["_obj"]
+            yield chat_module._sse({"type": "agent_start", "agentId": agent.id})
+
+            system_blocks, user_msg = _agent_call_args(
+                agent=agent,
+                company_text=company_text,
+                question_text=question_text,
+                transcript=transcript,
+                round_no=round_no_snap,
+            )
+            buffered = ""
+            final_model = DEFAULT_CHAT_MODEL
+            try:
+                with client.messages.stream(
+                    model=DEFAULT_CHAT_MODEL,
+                    max_tokens=DEBATE_MAX_TOKENS,
+                    system=system_blocks,
+                    messages=[{"role": "user", "content": user_msg}],
+                ) as stream:
+                    for token in stream.text_stream:
+                        if token:
+                            buffered += token
+                            yield chat_module._sse({"type": "text", "agentId": agent.id, "text": token})
+                    final = stream.get_final_message()
+                    final_model = getattr(final, "model", DEFAULT_CHAT_MODEL)
+            except anthropic.RateLimitError:
+                yield chat_module._sse({"type": "error", "detail": "anthropic_rate_limited"})
+                return
+            except anthropic.BadRequestError:
+                yield chat_module._sse({"type": "error", "detail": "anthropic_bad_request"})
+                return
+            except anthropic.APIError:
+                logger.exception("debate stream upstream error")
+                yield chat_module._sse({"type": "error", "detail": "anthropic_upstream_error"})
+                return
+
+            stance, body = _parse_stance(buffered)
+            cited = _scrape_source_ids(body, valid_source_ids_snap)
+            row = models.DebateMessage(
+                id=schemas.make_id("dm"),
+                question_id=question_id_snap,
+                round=round_no_snap,
+                agent_id=agent.id,
+                stance=stance,
+                text=body,
+                sources=cited,
+                model=final_model,
+            )
+            db.add(row)
+            db.flush()
+            yield chat_module._sse({
+                "type": "agent_done",
+                "agentId": agent.id,
+                "message": json.loads(_to_out(row).model_dump_json(by_alias=True)),
+            })
+
+        q = db.get(models.StrategyQuestion, question_id_snap)
+        if q is not None:
+            q.rounds = max(q.rounds or 0, round_no_snap)
+            if q.status not in ("decided",):
+                q.status = "in-debate"
+        db.commit()
+
+        yield chat_module._sse({"type": "done", "round": round_no_snap})
+
+    return StreamingResponse(
+        _gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _build_synthesis_prompt(db: Session, question_id: str) -> tuple[list[dict[str, Any]], str, int, int, int]:

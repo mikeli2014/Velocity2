@@ -175,3 +175,55 @@ def test_audit_filter_category_limit(client):
     body = res.json()
     assert len(body) == 1
     assert body[0]["category"] == "knowledge"
+
+
+# --- Ingest-queue → KnowledgeSource promotion --------------------------
+
+
+def test_approve_ingest_promotes_to_knowledge_source(client):
+    # iq-1 is "queued" in seed.
+    res = client.post("/api/v1/ingest-queue/iq-1/approve")
+    assert res.status_code == 201, res.text
+    body = res.json()
+
+    item = body["item"]
+    src = body["source"]
+
+    assert item["state"] == "approved"
+    assert item["progress"] == 100
+    # The source carries fields lifted from the queue item.
+    assert src["title"] == item["name"]
+    assert src["scope"] == item["scope"]
+    assert src["quality"] == "draft"
+    assert src["uploadedBy"]  # actor threaded through
+
+    # Source actually exists in the catalog now.
+    assert client.get(f"/api/v1/knowledge-sources/{src['id']}").status_code == 200
+
+    # Audit log carries a 知识源入库 row linking both ids.
+    audit = client.get("/api/v1/audit-log", params={"category": "knowledge"}).json()
+    promote = next(e for e in audit if e["action"] == "知识源入库")
+    assert promote["link"]["sourceId"] == src["id"]
+    assert promote["link"]["queueId"] == "iq-1"
+
+
+def test_approve_ingest_uses_x_user_id_actor(client):
+    res = client.post(
+        "/api/v1/ingest-queue/iq-2/approve",
+        headers={"X-User-Id": "su-wan"},
+    )
+    assert res.status_code == 201
+    src = res.json()["source"]
+    assert src["uploadedBy"] == "su-wan"
+
+
+def test_approve_ingest_already_approved_409(client):
+    # iq-3 happens to be "tagging" in seed; flip to approved manually first.
+    client.post("/api/v1/ingest-queue/iq-3/approve")
+    res = client.post("/api/v1/ingest-queue/iq-3/approve")
+    assert res.status_code == 409
+    assert res.json()["detail"] == "ingest_item_already_approved"
+
+
+def test_approve_ingest_404(client):
+    assert client.post("/api/v1/ingest-queue/iq-missing/approve").status_code == 404

@@ -464,6 +464,13 @@ class IngestQueuePatch(_CamelModel):
     error: str | None = None
 
 
+class IngestApproveResult(_CamelModel):
+    """Wire shape returned by ``POST /ingest-queue/{id}/approve``: the
+    updated queue item plus the freshly minted knowledge source."""
+    item: IngestQueueItemOut
+    source: KnowledgeSourceOut
+
+
 # --- Notifications / Routing / Audit ----------------------------------
 
 

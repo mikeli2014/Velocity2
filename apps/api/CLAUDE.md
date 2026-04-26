@@ -220,15 +220,18 @@ Decision 8 overturned: unified single-service deploy".
 
 ## Phase status (last updated alongside this commit)
 
-| | Phase 1 ✅ shipped | Phase 2 (queued) |
+Phase 2 is closed except for RAG, which is parked pending a design call
+on embedding provider + vector store (see DESIGN.md if/when it lands).
+
+| | Phase 1+2 ✅ shipped | Phase 3 (parked / future) |
 |---|---|---|
-| **CRUD** | Objectives + KRs, RoutingRules, Projects, Decisions, KnowledgeSources all full CRUD with audit emissions; KnowledgeDomain PATCH | Ingest-queue → KnowledgeSource promotion |
-| **AI** | `/api/v1/chat` (Sonnet 4.6) + `/api/v1/strategy-questions/{id}/debate` (multi-agent Sonnet) + `/api/v1/route` (Haiku 4.5 classifier). All use prompt caching and soft-fall to demo output when key missing. | Streaming responses; agent self-reflection / disagreement loops |
-| **RAG** | None | pgvector + document parser + embedding service |
-| **Auth** | None (public Cloud Run) | `X-User-Id` header → real OAuth / JWT |
-| **Frontend wiring** | None — frontend still reads `seed.js` | `useApi(...)` hook; per-page cutover |
-| **Deploy** | Unified Cloud Run service (root `Dockerfile` ships both FE bundle and API) | Optional split when scaling needs diverge |
-| **Tests** | pytest happy-path: 18 specs covering health / objectives / catalog / knowledge | + integration tests against a live preview deploy |
+| **CRUD** | Objectives + KRs, RoutingRules, Projects, Decisions, KnowledgeSources, IngestQueue (incl. → KnowledgeSource promotion) all full CRUD with audit emissions; KnowledgeDomain PATCH | — |
+| **AI** | `/api/v1/chat` + `/chat/stream` (Sonnet 4.6, prompt caching, SSE), `/api/v1/strategy-questions/{id}/debate` + `/round` + `/round/stream` + `/synthesis` + `/synthesis/stream` (per-agent SSE with cached company/question prefix), `/api/v1/route` (Haiku 4.5 classifier). Soft-fall to 503 when key missing. | Agent self-reflection / disagreement loops; tool use |
+| **RAG** | None — explicitly parked. | pgvector + document parser + Voyage embeddings |
+| **Auth** | `X-User-Id` header → `current_user` dep → audit `actor`. ASCII identifiers; demo default `陈志远` server-side. | Real OAuth / JWT via the same dep |
+| **Frontend wiring** | Every page reads from `useApi(...)` with seed fallback; OkrPage / KnowledgePage / Assistants&Governance / DepartmentPage / WorkflowsPage / Strategy WarCouncil all do API CRUD / streaming. | — |
+| **Deploy** | Unified Cloud Run service (root `Dockerfile` ships both FE bundle and API). `cloudbuild.yaml` documents the out-of-band `gcloud run services update --update-secrets=ANTHROPIC_API_KEY=...` flow. | Optional split when scaling needs diverge |
+| **Tests** | pytest 110 specs (health / objectives / catalog / knowledge / projects / decisions / sources / inbox / chat / chat-stream / debate / route / auth); Playwright 29 specs (smoke + features + API integration). | + integration tests against a live preview deploy |
 
 See `DESIGN.md` for the rationale behind these scoping calls and the
 follow-up entry overturning the original "separate service" deploy plan.
