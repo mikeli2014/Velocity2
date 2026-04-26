@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Icon } from "./primitives.jsx";
 import { Company, Departments, Notifications as SeedNotifications, NOTIFICATION_CATEGORIES } from "../data/seed.js";
+import { useApi } from "../lib/api.js";
 
 const NAV = [
   { id: "home", label: "首页", en: "Home", icon: "Home" },
@@ -166,6 +167,7 @@ export function Topbar({ route, setRoute }) {
         <kbd>⌘K</kbd>
       </div>
       <div className="topbar__actions">
+        <ApiConnectionIndicator />
         <button className="topbar__icon-btn" title="新建" onClick={() => window.dispatchEvent(new Event("velocity:open-palette"))}>
           <Icon.Plus size={16} />
         </button>
@@ -275,5 +277,38 @@ function NotificationDropdown({ notifs, unread, onPick, onMarkAllRead, onClose }
         })}
       </div>
     </div>
+  );
+}
+
+function ApiConnectionIndicator() {
+  // Cheap liveness probe — hits /api/v1/health on mount and stays passive.
+  // Showing a small green/grey dot in the topbar so the connection state
+  // is visible without needing to open dev tools or look at per-page pills.
+  const { data, error, loading } = useApi("/api/v1/health");
+  const status = loading ? "loading" : error ? "offline" : "online";
+  const meta = {
+    online:  { color: "#10b981", label: `API · ${data?.database || "online"}`, title: data ? `Velocity API v${data.version} · ${data.database} · ${data.objectiveCount} 个 Objective` : "API connected" },
+    offline: { color: "#94a3b8", label: "离线 (seed)",                          title: error?.message || "API unreachable — using bundled seed data" },
+    loading: { color: "#fbbf24", label: "连接中…",                              title: "Probing /api/v1/health" }
+  };
+  const m = meta[status];
+  return (
+    <span
+      className="pill pill--neutral"
+      title={m.title}
+      style={{
+        gap: 6, marginRight: 6,
+        background: status === "online" ? "rgba(16,185,129,0.10)" : status === "loading" ? "rgba(251,191,36,0.10)" : undefined,
+        color: status === "online" ? "var(--success-text)" : status === "loading" ? "var(--warning-text)" : "var(--fg3)"
+      }}
+    >
+      <span style={{
+        width: 6, height: 6, borderRadius: 3,
+        background: m.color,
+        boxShadow: status === "online" ? "0 0 0 3px rgba(16,185,129,0.18)" : undefined,
+        animation: status === "loading" ? "spin 1s linear infinite" : undefined
+      }} />
+      {m.label}
+    </span>
   );
 }

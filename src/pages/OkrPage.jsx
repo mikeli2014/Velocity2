@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Icon, Progress, HealthPill, Modal, ConfirmModal, EmptyState,
   makeId, STATUS_OPTS, HEALTH_OPTS
 } from "../components/primitives.jsx";
 import { ProjectDetail } from "../components/ProjectDetail.jsx";
+import { useApi, apiPost, apiPatch, apiDelete, ApiError } from "../lib/api.js";
 import {
   Objectives as SeedObjectives,
   Projects as SeedProjects,
@@ -17,7 +18,21 @@ import {
 
 export function OkrPage() {
   const [tab, setTab] = useState("objectives");
-  const [objectives, setObjectives] = useState(() => SeedObjectives.map(o => ({ ...o, krs: o.krs.map(k => ({ ...k })) })));
+
+  // Phase 2 step 1: objectives come from /api/v1/objectives, with seed
+  // fallback when the API is offline. Slider drags update local state
+  // only — explicit save / Check-in actions persist to the backend.
+  const { data: apiObjectives, loading: objLoading, error: objError, refresh: refreshObjectives } = useApi("/api/v1/objectives");
+  const baseObjectives = apiObjectives ?? SeedObjectives.map(o => ({ ...o, krs: o.krs.map(k => ({ ...k })) }));
+  const [objectives, setObjectives] = useState(baseObjectives);
+  // Re-sync from server when fresh data arrives. Calculated-during-render
+  // pattern from React docs; avoids the "setState in effect" lint.
+  const lastApiRef = useRef(apiObjectives);
+  if (apiObjectives && apiObjectives !== lastApiRef.current) {
+    lastApiRef.current = apiObjectives;
+    setObjectives(apiObjectives);
+  }
+
   const [projects, setProjects] = useState(() => SeedProjects.map(p => ({ ...p })));
   const [decisions, setDecisions] = useState(() => SeedDecisions.map(d => ({ ...d })));
 
@@ -35,16 +50,44 @@ export function OkrPage() {
     return Math.round(o.krs.reduce((s, k) => s + Number(k.progress || 0), 0) / o.krs.length);
   }
 
-  function saveObjective(next) {
+  async function saveObjective(next) {
+    const isNew = !!next.__isNew;
     next.progress = rollupProgress(next);
+    // Optimistic local apply so the user sees the change immediately.
     setObjectives(list => {
       const i = list.findIndex(o => o.id === next.id);
       if (i === -1) return [...list, next];
       const copy = list.slice(); copy[i] = next; return copy;
     });
     setEditingObj(null);
+    // Persist. eslint-disable-next-line no-unused-vars
+    try {
+      const { __isNew: _omit, ...payload } = next;
+      if (isNew) {
+        await apiPost("/api/v1/objectives", payload);
+      } else {
+        await apiPatch(`/api/v1/objectives/${next.id}`, payload);
+      }
+      refreshObjectives();
+    } catch (err) {
+      console.warn("[velocity] objective save failed; keeping local-only", err);
+    }
   }
-  function deleteObjective(id) { setObjectives(list => list.filter(o => o.id !== id)); setConfirm(null); }
+
+  async function deleteObjective(id) {
+    setObjectives(list => list.filter(o => o.id !== id));
+    setConfirm(null);
+    try {
+      await apiDelete(`/api/v1/objectives/${id}`);
+      refreshObjectives();
+    } catch (err) {
+      // 404 means the row never existed on the server (seed-only). No-op.
+      if (!(err instanceof ApiError && err.status === 404)) {
+        console.warn("[velocity] objective delete failed; keeping local-only", err);
+      }
+    }
+  }
+
   function newObjective() {
     setEditingObj({
       id: makeId("obj"),
@@ -218,18 +261,32 @@ export function OkrPage() {
           ctx={checkInKR}
           checkIns={checkIns.filter(c => c.krId === checkInKR.kr.id)}
           onClose={() => setCheckInKR(null)}
-          onSubmit={(entry) => {
+          onSubmit={async (entry) => {
+            // KRCheckIns aren't yet a real API resource (Phase 2 step 2);
+            // keep them as local-only state.
             setCheckIns(prev => [entry, ...prev]);
+
+            // Apply locally for instant feedback.
+            const updatedKrs = checkInKR.obj.krs.map(k => k.id === checkInKR.kr.id
+              ? { ...k, progress: entry.progress, current: entry.current || k.current, status: entry.progress >= 100 ? "achieved" : k.status }
+              : k);
             setObjectives(list => list.map(x => {
               if (x.id !== checkInKR.obj.id) return x;
-              const krs = x.krs.map(k => k.id === checkInKR.kr.id
-                ? { ...k, progress: entry.progress, current: entry.current || k.current, status: entry.progress >= 100 ? "achieved" : k.status }
-                : k);
-              const next = { ...x, krs };
+              const next = { ...x, krs: updatedKrs };
               next.progress = rollupProgress(next);
               return next;
             }));
             setCheckInKR(null);
+
+            // Persist the new KR progress to the backend.
+            try {
+              await apiPatch(`/api/v1/objectives/${checkInKR.obj.id}`, { krs: updatedKrs });
+              refreshObjectives();
+            } catch (err) {
+              if (!(err instanceof ApiError && err.status === 404)) {
+                console.warn("[velocity] KR check-in PATCH failed; keeping local-only", err);
+              }
+            }
           }}
         />
       )}
