@@ -60,10 +60,13 @@ export function StrategyPage() {
 
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
         {tab === "registry" && <QuestionRegistry questions={questions} currentId={questionId} onSelect={(id) => { setQuestionId(id); setTab("canvas"); }} onNew={() => setCreating(true)} />}
-        {tab === "canvas" && (isPrimary ? <StrategyCanvas /> : <StrategyPlaceholder variant="canvas" />)}
-        {tab === "war" && (isPrimary ? <WarCouncil questionId={question.id} /> : <StrategyPlaceholder variant="war" />)}
-        {tab === "options" && (isPrimary ? <StrategyOptions /> : <StrategyPlaceholder variant="options" />)}
-        {tab === "output" && (isPrimary ? <StructuredOutput /> : <StrategyPlaceholder variant="output" />)}
+        {tab === "canvas" && (isPrimary ? <StrategyCanvas /> : <StrategyPlaceholder variant="canvas" onLaunchDebate={() => setTab("war")} />)}
+        {/* WarCouncil works for any question — it reads the API and lets you
+            run a fresh debate round. Canvas / Options / Output still hard-
+            code sq-1 layout, so those keep their placeholders. */}
+        {tab === "war" && <WarCouncil question={question} />}
+        {tab === "options" && (isPrimary ? <StrategyOptions /> : <StrategyPlaceholder variant="options" onLaunchDebate={() => setTab("war")} />)}
+        {tab === "output" && (isPrimary ? <StructuredOutput /> : <StrategyPlaceholder variant="output" onLaunchDebate={() => setTab("war")} />)}
       </div>
 
       {creating && (
@@ -256,9 +259,9 @@ function QuestionRegistry({ questions, currentId, onSelect, onNew }) {
   );
 }
 
-function StrategyPlaceholder({ variant }) {
+function StrategyPlaceholder({ variant, onLaunchDebate }) {
   const map = {
-    canvas: { title: "尚未生成研讨画布", body: "切换到「战略问题」选择当前研讨,或点击下方启动多 Agent 研讨。" },
+    canvas: { title: "尚未生成研讨画布", body: "Canvas 画布仍按 sq-1 演示数据布局。点击下方启动多 Agent 研讨进入 War Council 进行真实辩论。" },
     war: { title: "尚无 War Council 记录", body: "本问题尚未运行多轮研讨。启动后可查看每位 Agent 的赞成 / 反对 / 保留立场和证据来源。" },
     options: { title: "尚未生成战略选项", body: "完成至少一轮研讨后,Velocity 会基于不同假设生成 2-3 个候选方案供管理层比较。" },
     output: { title: "尚未生成结构化输出", body: "决议确认后,Velocity 会自动生成 Objective / KR / 关键项目草案与决策日志条目。" }
@@ -272,8 +275,13 @@ function StrategyPlaceholder({ variant }) {
           <div style={{ fontSize: 16, fontWeight: 700, color: "var(--fg1)", marginBottom: 6 }}>{c.title}</div>
           <div style={{ fontSize: 13, color: "var(--fg3)", lineHeight: 1.6, marginBottom: 18 }}>{c.body}</div>
           <div className="row" style={{ gap: 8, justifyContent: "center" }}>
-            <button className="btn btn--ghost btn--sm"><Icon.FileText size={13} /> 添加背景资料</button>
-            <button className="btn btn--primary btn--sm"><Icon.Sparkles size={13} /> 启动多 Agent 研讨</button>
+            <button
+              className="btn btn--primary btn--sm"
+              onClick={onLaunchDebate}
+              disabled={!onLaunchDebate}
+            >
+              <Icon.Sparkles size={13} /> 启动多 Agent 研讨
+            </button>
           </div>
         </div>
       </div>
@@ -522,22 +530,34 @@ function StrategyCanvas() {
   );
 }
 
-function WarCouncil({ questionId }) {
-  // Live debate transcript from the API; falls back to the seed when
-  // the backend isn't reachable so the demo still feels populated.
+function WarCouncil({ question }) {
+  const questionId = question.id;
+  // Live debate transcript from the API. Seed fallback is gated to sq-1
+  // (the only question with hand-authored DebateMessages); for any other
+  // question we render the live API result (or empty while loading).
   const { data: apiMessages, refresh } = useApi(`/api/v1/strategy-questions/${questionId}/debate`);
-  const messages = apiMessages ?? SeedDebateMessages.map(m => ({
-    // Normalize seed shape to the wire shape used below.
-    id: `${m.agent}-${m.round}`,
-    round: m.round,
-    agentId: m.agent,
-    stance: m.stance,
-    text: m.text,
-    sources: m.sources || []
-  }));
+  const fallback = questionId === "sq-1"
+    ? SeedDebateMessages.map(m => ({
+        id: `${m.agent}-${m.round}`,
+        round: m.round,
+        agentId: m.agent,
+        stance: m.stance,
+        text: m.text,
+        sources: m.sources || []
+      }))
+    : [];
+  const messages = apiMessages ?? fallback;
+  const hasMessages = messages.length > 0;
   const rounds = Array.from(new Set(messages.map(m => m.round))).sort((a, b) => a - b);
-  if (rounds.length === 0) rounds.push(1);
-  const nextRound = (rounds[rounds.length - 1] || 0) + 1;
+  const nextRound = hasMessages ? (rounds[rounds.length - 1] || 0) + 1 : 1;
+  // sq-5 has agents=[] in seed. When the question carries no agents,
+  // default the round to all 8 personas so the launch button doesn't
+  // 400 with no_agents.
+  const questionAgents = question.agents || [];
+  const effectiveAgentIds = questionAgents.length > 0
+    ? questionAgents
+    : Agents.map(a => a.id);
+  const usingDefaultAgents = questionAgents.length === 0;
 
   const [running, setRunning] = useState(false);
   const [synth, setSynth] = useState(null);
@@ -553,7 +573,12 @@ function WarCouncil({ questionId }) {
     setRunning(true);
     setError(null);
     setLiveRound({ round: null, current: null, buffers: {} });
-    apiStream(`/api/v1/strategy-questions/${questionId}/debate/round/stream`, {}, {
+    // Explicit agent list when the question itself has none (sq-5 etc.).
+    // The backend will accept either an explicit list or fall back to
+    // question.agents — we send explicit when defaulting so the user
+    // sees the full council, not a 400.
+    const body = usingDefaultAgents ? { agentIds: effectiveAgentIds } : {};
+    apiStream(`/api/v1/strategy-questions/${questionId}/debate/round/stream`, body, {
       onEvent: (ev) => {
         if (ev.type === "round") {
           setLiveRound(s => ({ ...(s || {}), round: ev.round, agents: ev.agents }));
@@ -632,7 +657,10 @@ function WarCouncil({ questionId }) {
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 40px" }}>
         <div className="row" style={{ justifyContent: "space-between", marginBottom: 18 }}>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
-            已运行 <strong style={{ color: "#fff" }}>{rounds.length}</strong> 轮 · 共 {messages.length} 条发言
+            <span>已运行 <strong style={{ color: "#fff" }}>{rounds.length}</strong> 轮 · 共 {messages.length} 条发言</span>
+            {usingDefaultAgents && (
+              <span style={{ marginLeft: 12, color: "#fcd34d" }}>· 使用全部 {effectiveAgentIds.length} 个默认 Agent</span>
+            )}
           </div>
           <div className="row" style={{ gap: 8 }}>
             <button
@@ -652,6 +680,16 @@ function WarCouncil({ questionId }) {
             </button>
           </div>
         </div>
+        {!hasMessages && !liveRound && (
+          <div style={{ padding: "32px 24px", background: "rgba(255,255,255,0.04)", border: "1px dashed rgba(255,255,255,0.18)", borderRadius: 12, textAlign: "center", marginBottom: 18 }}>
+            <Icon.Sparkles size={22} style={{ color: "#c4b5fd", marginBottom: 8 }} />
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", marginBottom: 6 }}>本问题尚未运行多智能体研讨</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", lineHeight: 1.6 }}>
+              点击右上角「运行第 1 轮」启动 Sonnet 4.6 多 Agent 辩论。
+              {usingDefaultAgents && "本问题未指定 Agent — 将使用全部 8 个默认角色。"}
+            </div>
+          </div>
+        )}
         {error && (
           <div style={{ marginBottom: 16, padding: "10px 14px", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, color: "#fca5a5", fontSize: 12 }}>
             {error === "anthropic_not_configured"
