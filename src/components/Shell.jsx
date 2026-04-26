@@ -9,6 +9,7 @@ const NAV = [
   { id: "okr", label: "OKR 与关键项目", en: "OKR & Projects", icon: "Target" },
   { id: "departments", label: "部门工作空间", en: "Departments", icon: "Layers", expandable: true },
   { id: "skills", label: "技能中心", en: "Skill Packs", icon: "Sparkles" },
+  { id: "workflows", label: "工作流中心", en: "Workflows", icon: "Workflow" },
   { id: "assistants", label: "助手中心", en: "Assistants", icon: "MessageCircle" },
   { id: "governance", label: "权限与治理", en: "Governance", icon: "Shield" },
   { id: "admin", label: "管理后台", en: "Admin Console", icon: "Settings" }
@@ -105,6 +106,7 @@ export function Topbar({ route }) {
       departments: ["部门工作空间"],
       department: ["部门工作空间", Departments.find(d => d.id === route.deptId)?.name],
       skills: ["技能中心"],
+      workflows: ["工作流中心"],
       assistants: ["助手中心"],
       governance: ["权限与治理"],
       admin: ["管理后台"]

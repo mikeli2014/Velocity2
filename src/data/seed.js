@@ -331,3 +331,269 @@ export const TopUsers = [
   { name: "韩松", dept: "供应链部", role: "COO", calls: 212, tokens: 11.2, cost: 124, top: "动销预测" },
   { name: "刘瑶", dept: "财务部", role: "CFO", calls: 186, tokens: 8.8, cost: 0, top: "本地模型 / 月度复盘" }
 ];
+
+// =============== Workflow Templates =======================================
+// Workflow templates are reusable AI-assisted process recipes that combine
+// knowledge domains, skill packs and human approvals. Each template lives in
+// a department; some are platform-wide.
+export const WORKFLOW_STATUSES = [
+  { v: "published",  label: "已发布", color: "#10b981" },
+  { v: "draft",      label: "草稿",   color: "#f59e0b" },
+  { v: "deprecated", label: "已下线", color: "#94a3b8" }
+];
+
+export const Workflows = [
+  {
+    id: "wf-design-brief", name: "创建设计简报", deptId: "industrial-design", owner: "李慕白",
+    status: "published", version: "v2.1.0", icon: "FileText",
+    description: "把项目方向 + 公司 OKR + 用户画像 + 部门知识结构化成可评审的设计简报。",
+    input: "项目方向 / 关联 OKR / 用户画像", output: "结构化设计简报 (含 CMF / 工艺 / 成本约束)",
+    avgTime: "约 8 分钟", uses: 64, lastRun: "2 小时前", linkedSkills: ["sp-design-brief", "sp-mat-search"], linkedDomains: ["kd-cmf", "kd-material", "kd-trend"],
+    steps: [
+      { id: "s1", name: "锁定项目方向与目标用户", role: "human", time: "1 min" },
+      { id: "s2", name: "拉取公司 OKR + 关联项目作为背景", role: "system", time: "<5s" },
+      { id: "s3", name: "运行 Skill — 供应商/材料/工艺检索", role: "skill", skillId: "sp-mat-search", time: "30s" },
+      { id: "s4", name: "运行 Skill — 设计简报生成", role: "skill", skillId: "sp-design-brief", time: "45s" },
+      { id: "s5", name: "提交人工评审", role: "approval", approver: "设计总监", time: "1 day" }
+    ]
+  },
+  {
+    id: "wf-mat-compare", name: "材料方案对比", deptId: "industrial-design", owner: "陈思源",
+    status: "published", version: "v1.4.0", icon: "GitBranch",
+    description: "在 2-3 个候选材料 / 工艺间进行成本、性能、可获得性的横向对比并形成推荐。",
+    input: "候选材料 / 工艺清单 + 设计目标", output: "对比表 + 推荐结论 + 风险条目",
+    avgTime: "约 5 分钟", uses: 38, lastRun: "今早 09:50", linkedSkills: ["sp-mat-search", "sp-cross-cat"], linkedDomains: ["kd-material", "kd-process", "kd-supplier"],
+    steps: [
+      { id: "s1", name: "明确对比维度 (成本/性能/工艺周期)", role: "human", time: "2 min" },
+      { id: "s2", name: "运行 Skill — 供应商/材料/工艺检索", role: "skill", skillId: "sp-mat-search", time: "30s" },
+      { id: "s3", name: "运行 Skill — 跨品类关联", role: "skill", skillId: "sp-cross-cat", time: "45s" },
+      { id: "s4", name: "AI 汇总对比表 + 推荐", role: "ai", time: "1 min" }
+    ]
+  },
+  {
+    id: "wf-cmf-feasibility", name: "CMF 可行性检查", deptId: "id-cmf", owner: "苏婉",
+    status: "published", version: "v1.2.0", icon: "Eye",
+    description: "上传 CMF 方案,自动核查与已有材料 / 工艺 / 供应商能力的匹配度。",
+    input: "CMF 方案图 / 工艺规格", output: "可行性评分 / 替代方案 / 风险清单",
+    avgTime: "约 12 分钟", uses: 27, lastRun: "昨天", linkedSkills: ["sp-cmf-vision", "sp-mat-search"], linkedDomains: ["kd-cmf", "kd-material", "kd-process"],
+    steps: [
+      { id: "s1", name: "上传 CMF 方案图", role: "human", time: "1 min" },
+      { id: "s2", name: "运行 Skill — CMF 图片识别", role: "skill", skillId: "sp-cmf-vision", time: "1 min" },
+      { id: "s3", name: "对比中台 CMF 知识域", role: "system", time: "10s" },
+      { id: "s4", name: "运行 Skill — 供应商/材料/工艺检索", role: "skill", skillId: "sp-mat-search", time: "30s" },
+      { id: "s5", name: "AI 输出可行性评分", role: "ai", time: "1 min" },
+      { id: "s6", name: "CMF 总监评审", role: "approval", approver: "苏婉", time: "1 day" }
+    ]
+  },
+  {
+    id: "wf-supplier-review", name: "供应商 / 工艺评审", deptId: "industrial-design", owner: "陈思源",
+    status: "published", version: "v1.0.0", icon: "Workflow",
+    description: "为关键项目准备供应商 + 工艺评审包,包含资质、产能、过往案例和风险。",
+    input: "供应商清单 / 工艺需求", output: "评审包 + 推荐排序 + 关键风险",
+    avgTime: "约 18 分钟", uses: 19, lastRun: "3 天前", linkedSkills: ["sp-mat-search"], linkedDomains: ["kd-supplier", "kd-process"],
+    steps: [
+      { id: "s1", name: "选择供应商池", role: "human", time: "3 min" },
+      { id: "s2", name: "拉取资质 / 产能 / 案例", role: "system", time: "30s" },
+      { id: "s3", name: "运行 Skill — 供应商/材料/工艺检索", role: "skill", skillId: "sp-mat-search", time: "1 min" },
+      { id: "s4", name: "AI 排序 + 风险清单", role: "ai", time: "2 min" },
+      { id: "s5", name: "采购 + 设计联合评审", role: "approval", approver: "采购总监 + 设计总监", time: "2 day" }
+    ]
+  },
+  {
+    id: "wf-fault-triage", name: "工单故障归因", deptId: "service", owner: "王锐",
+    status: "published", version: "v1.3.0", icon: "Stethoscope",
+    description: "把售后工单输入到诊断助手,自动给出可能原因、配件、SOP 和上门优先级。",
+    input: "工单描述 / 故障代码", output: "可能原因 / 配件 / SOP / 优先级",
+    avgTime: "约 2 分钟", uses: 1240, lastRun: "1 分钟前", linkedSkills: ["sp-fault-diag"], linkedDomains: [],
+    steps: [
+      { id: "s1", name: "技师 / 客服录入工单", role: "human", time: "30s" },
+      { id: "s2", name: "运行 Skill — 故障诊断助手", role: "skill", skillId: "sp-fault-diag", time: "20s" },
+      { id: "s3", name: "AI 给出 SOP 与配件清单", role: "ai", time: "30s" },
+      { id: "s4", name: "技师确认并派单", role: "human", time: "1 min" }
+    ]
+  },
+  {
+    id: "wf-price-anomaly", name: "渠道价格异常排查", deptId: "cop", owner: "周岚",
+    status: "published", version: "v1.0.0", icon: "AlertTriangle",
+    description: "针对城市 + 渠道 + 周期跑一次价格异常检测,生成 SKU 级处理建议。",
+    input: "城市 / 渠道 / 周期", output: "异常 SKU / 偏差幅度 / 处理建议",
+    avgTime: "约 4 分钟", uses: 88, lastRun: "今早", linkedSkills: ["sp-price-anomaly"], linkedDomains: [],
+    steps: [
+      { id: "s1", name: "选择城市 / 渠道 / 周期", role: "human", time: "1 min" },
+      { id: "s2", name: "运行 Skill — 价格异常检测", role: "skill", skillId: "sp-price-anomaly", time: "20s" },
+      { id: "s3", name: "AI 生成 SKU 级处理建议", role: "ai", time: "1 min" },
+      { id: "s4", name: "渠道经理确认", role: "approval", approver: "周岚", time: "1 hour" }
+    ]
+  },
+  {
+    id: "wf-meeting-notes", name: "会议纪要结构化", deptId: "platform", owner: "IT / 张毅",
+    status: "published", version: "v2.2.0", icon: "FileText",
+    description: "把录音 / 转写文本拆解成结论 / 决议 / 待办,并自动关联到 OKR 与项目。",
+    input: "录音 / 转写文本", output: "结论 / 决议 / 待办 / 关联 OKR",
+    avgTime: "约 3 分钟", uses: 1872, lastRun: "10 分钟前", linkedSkills: ["sp-meeting-notes"], linkedDomains: [],
+    steps: [
+      { id: "s1", name: "上传录音或文本", role: "human", time: "30s" },
+      { id: "s2", name: "运行 Skill — 会议纪要结构化", role: "skill", skillId: "sp-meeting-notes", time: "1 min" },
+      { id: "s3", name: "AI 自动关联到 OKR / 项目", role: "ai", time: "30s" }
+    ]
+  },
+  {
+    id: "wf-replenish", name: "动销预测与补货建议", deptId: "supply-chain", owner: "韩松",
+    status: "draft", version: "v0.6.0", icon: "Truck",
+    description: "对 SKU 做动销预测并给出周维度的补货建议,叠加渠道 / 季节修正。",
+    input: "SKU 池 + 历史动销", output: "周补货建议 / 风险预警",
+    avgTime: "约 9 分钟", uses: 12, lastRun: "—", linkedSkills: [], linkedDomains: [],
+    steps: [
+      { id: "s1", name: "选择 SKU 池", role: "human", time: "1 min" },
+      { id: "s2", name: "拉取历史动销与库存", role: "system", time: "20s" },
+      { id: "s3", name: "AI 预测 4 周动销", role: "ai", time: "2 min" },
+      { id: "s4", name: "供应链评审", role: "approval", approver: "韩松", time: "0.5 day" }
+    ]
+  }
+];
+
+export const WorkflowRuns = [
+  { id: "run-1", workflowId: "wf-fault-triage", trigger: "工单 #SR-20260425-9821", actor: "客服 · 林楠", started: "10:42", duration: "1m 38s", status: "ok", output: "推荐 SOP-FW-008 + 配件 PN-2241" },
+  { id: "run-2", workflowId: "wf-design-brief", trigger: "项目 — 全屋净水 2.0", actor: "李慕白", started: "10:18", duration: "7m 02s", status: "ok", output: "已生成 8 页结构化简报" },
+  { id: "run-3", workflowId: "wf-cmf-feasibility", trigger: "项目 — 9 大品类 CMF", actor: "苏婉", started: "09:55", duration: "11m 24s", status: "approval", output: "等待 CMF 总监评审" },
+  { id: "run-4", workflowId: "wf-meeting-notes", trigger: "FY26 季度战略会", actor: "陈志远 · 战略办", started: "09:32", duration: "2m 41s", status: "ok", output: "12 条决议 / 8 条待办 · 已链接 O1 / O2" },
+  { id: "run-5", workflowId: "wf-price-anomaly", trigger: "上海地区 · 4 月", actor: "周岚", started: "09:10", duration: "3m 18s", status: "warn", output: "11 个 SKU 偏差 > 8%" },
+  { id: "run-6", workflowId: "wf-mat-compare", trigger: "X 系列外壳", actor: "孙阳", started: "08:45", duration: "5m 04s", status: "ok", output: "推荐 PVD-Black,综合分 8.6/10" },
+  { id: "run-7", workflowId: "wf-supplier-review", trigger: "净水 2.0 膜组件", actor: "陈思源", started: "昨天", duration: "16m 12s", status: "fail", output: "供应商资质年检数据缺失" }
+];
+
+// =============== Strategy Question Registry ==============================
+// Many ongoing strategic questions, each with status / debate progress / OKR
+// linkages. The detail page (StrategyPage) renders one selected question.
+export const STRATEGY_STATUSES = [
+  { v: "draft",      label: "草稿",   color: "#94a3b8" },
+  { v: "in-debate",  label: "研讨中", color: "#4F46E5" },
+  { v: "decided",    label: "已定调", color: "#10b981" },
+  { v: "archived",   label: "已归档", color: "#64748b" }
+];
+
+export const StrategyQuestions = [
+  {
+    id: "sq-1",
+    title: "FY26 是否加大线上 DTC 渠道投入？",
+    asker: "陈志远 · CEO",
+    asked: "2026-04-23",
+    status: "in-debate",
+    summary: "线上 DTC 是否能成为全屋净水套系的主力增长引擎,以及对线下渠道的冲击如何控制。",
+    rounds: 3, optionsCount: 3, decisionId: null,
+    context: ["ks-1", "ks-3", "ks-4"],
+    okrs: ["O1", "O2"],
+    agents: ["ag-finance", "ag-product", "ag-gtm", "ag-ops", "ag-risk", "ag-supply", "ag-org"]
+  },
+  {
+    id: "sq-2",
+    title: "FY26 H2 是否进入欧洲市场首发新风净化机？",
+    asker: "Renee · 海外事业部",
+    asked: "2026-04-12",
+    status: "in-debate",
+    summary: "G3 新风净化机在欧洲首发,需评估 CE 认证节奏、北欧市场壁垒以及与现有海外合作渠道的协同。",
+    rounds: 2, optionsCount: 2, decisionId: null,
+    context: ["ks-1", "ks-7"],
+    okrs: ["O1"],
+    agents: ["ag-product", "ag-gtm", "ag-finance", "ag-supply", "ag-risk"]
+  },
+  {
+    id: "sq-3",
+    title: "县域服务网络由 BP 主导改为 SC 主导是否提升履约？",
+    asker: "周岚 · COP VP",
+    asked: "2026-03-18",
+    status: "decided",
+    summary: "已完成 3 轮研讨与 2 城试点,数据显示 SC 主导能把响应时长从 38h 降至 14h。",
+    rounds: 3, optionsCount: 2, decisionId: "d-2",
+    context: ["ks-3", "ks-6"],
+    okrs: ["O2"],
+    agents: ["ag-ops", "ag-risk", "ag-org", "ag-product", "ag-gtm"]
+  },
+  {
+    id: "sq-4",
+    title: "Velocity 部门助手是否优先工业设计部全员上线？",
+    asker: "黄毅 · CTO",
+    asked: "2026-03-04",
+    status: "decided",
+    summary: "工业设计部需求最强且数据基础最好,先在该部门全员上线,作为后续部门的样板。",
+    rounds: 2, optionsCount: 3, decisionId: "d-3",
+    context: ["ks-7"],
+    okrs: ["O4"],
+    agents: ["ag-product", "ag-tech", "ag-org", "ag-risk"]
+  },
+  {
+    id: "sq-5",
+    title: "FY27 是否把 9 大品类 CMF 中台对外开放给经销商？",
+    asker: "苏婉 · 设计总监",
+    asked: "2026-04-25",
+    status: "draft",
+    summary: "想法初稿:CMF 中台可以变成对内 + 对经销商的共享设计资产,但需评估知识产权与商业模式。",
+    rounds: 0, optionsCount: 0, decisionId: null,
+    context: ["ks-5"],
+    okrs: ["O3"],
+    agents: []
+  }
+];
+
+// =============== Decisions (enriched) =====================================
+// Adds: question / conclusion / assumptions / dissent / evidence / status /
+// retrospective. Backwards-compatible with existing { title, date, owner,
+// linkedKR, evidence } shape used by the OkrPage decision tab.
+export const DECISION_STATUSES = [
+  { v: "draft",       label: "草稿",   color: "#94a3b8" },
+  { v: "decided",     label: "已定调", color: "#4F46E5" },
+  { v: "in-flight",   label: "执行中", color: "#10b981" },
+  { v: "retro",       label: "已复盘", color: "#7c3aed" }
+];
+
+export const DecisionsRich = [
+  {
+    id: "d-1",
+    title: "全屋净水 2.0 产品定位收敛为'局改焕新'",
+    date: "2026-03-12", owner: "陈志远", status: "in-flight", linkedKR: "kr-1-1", linkedProject: "proj-1", linkedQuestion: null,
+    question: "全屋净水 2.0 应该面向新房刚需还是局改用户?",
+    conclusion: "面向 4-5 年房龄的局改家庭,以'焕新'为核心叙事,优先优化安装与售后体验。",
+    assumptions: [
+      "局改家庭对净水的认知度高于新装,客单价可上探 ¥18,000",
+      "县域服务网络可在 Q3 完成铺设,支撑套系级履约"
+    ],
+    dissent: [
+      { agent: "ag-finance", text: "局改客群规模较新装小 60%,需要靠客单价补偿" }
+    ],
+    evidenceSources: ["ks-1", "ks-2", "ks-4", "ks-8"],
+    retrospective: ""
+  },
+  {
+    id: "d-2",
+    title: "县域服务网络由 BP 主导改为 SC 主导",
+    date: "2026-04-02", owner: "周岚", status: "in-flight", linkedKR: "kr-2-1", linkedProject: "proj-5", linkedQuestion: "sq-3",
+    question: "县域市场谁来主导服务网络铺设?BP 渠道商,还是 SC 服务商?",
+    conclusion: "由 SC 主导服务网络,BP 保留商品销售。先在 10 城试点,Q3 复制到 30 城。",
+    assumptions: [
+      "SC 主导能把上门响应时长从 38h 降到 ≤14h",
+      "县域 SA (服务工程师) 培训体系可在 Q2 落地"
+    ],
+    dissent: [
+      { agent: "ag-risk", text: "BP / SC 角色切换会让历史合作 BP 受损,需要给出补偿机制" },
+      { agent: "ag-ops",  text: "SC 主导的备件库存预算是 BP 的 1.6 倍,需提前预算" }
+    ],
+    evidenceSources: ["ks-3", "ks-6"],
+    retrospective: ""
+  },
+  {
+    id: "d-3",
+    title: "Velocity 部门助手优先工业设计部全员上线",
+    date: "2026-04-15", owner: "黄毅", status: "in-flight", linkedKR: "kr-4-1", linkedProject: "proj-6", linkedQuestion: "sq-4",
+    question: "Velocity 部门助手按什么次序在公司内推开?",
+    conclusion: "工业设计部先全员上线,然后是服务部 → 渠道运营部 → 供应链。",
+    assumptions: [
+      "工业设计部 84 人有最强的 AI 工作流诉求",
+      "CMF 知识域已经达到 95% 覆盖度,RAG 命中率有保证"
+    ],
+    dissent: [
+      { agent: "ag-org", text: "如果只在 ID 上线,其它部门的高频用户(如服务部 1820 人)感知会差" }
+    ],
+    evidenceSources: ["ks-7"],
+    retrospective: ""
+  }
+];

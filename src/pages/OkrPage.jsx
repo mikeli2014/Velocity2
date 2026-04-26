@@ -3,7 +3,16 @@ import {
   Icon, Progress, HealthPill, Modal, ConfirmModal, EmptyState,
   makeId, STATUS_OPTS, HEALTH_OPTS
 } from "../components/primitives.jsx";
-import { Objectives as SeedObjectives, Projects as SeedProjects, Decisions as SeedDecisions } from "../data/seed.js";
+import { ProjectDetail } from "../components/ProjectDetail.jsx";
+import {
+  Objectives as SeedObjectives,
+  Projects as SeedProjects,
+  DecisionsRich as SeedDecisions,
+  DECISION_STATUSES,
+  KnowledgeSources,
+  Agents,
+  StrategyQuestions
+} from "../data/seed.js";
 
 export function OkrPage() {
   const [tab, setTab] = useState("objectives");
@@ -14,7 +23,9 @@ export function OkrPage() {
   const [editingObj, setEditingObj] = useState(null);
   const [editingProj, setEditingProj] = useState(null);
   const [editingDec, setEditingDec] = useState(null);
+  const [viewingDec, setViewingDec] = useState(null);
   const [confirm, setConfirm] = useState(null);
+  const [viewingProj, setViewingProj] = useState(null);
 
   function rollupProgress(o) {
     if (!o.krs || !o.krs.length) return 0;
@@ -67,7 +78,14 @@ export function OkrPage() {
   function deleteDecision(id) { setDecisions(list => list.filter(d => d.id !== id)); setConfirm(null); }
   function newDecision() {
     const today = new Date().toISOString().slice(0, 10);
-    setEditingDec({ id: makeId("d"), title: "", date: today, owner: "", linkedKR: "kr-1-1", evidence: 0, __isNew: true });
+    setEditingDec({
+      id: makeId("d"),
+      title: "", question: "", conclusion: "",
+      date: today, owner: "", status: "decided",
+      linkedKR: "", linkedQuestion: "",
+      assumptions: [], dissent: [], evidenceSources: [], retrospective: "",
+      __isNew: true
+    });
   }
 
   const tabsCfg = [
@@ -137,6 +155,7 @@ export function OkrPage() {
       {tab === "projects" && (
         <ProjectsTable
           projects={projects}
+          onView={p => setViewingProj(p)}
           onEdit={p => setEditingProj({ ...p })}
           onDelete={p => setConfirm({
             title: "删除关键项目?",
@@ -152,6 +171,7 @@ export function OkrPage() {
       {tab === "decisions" && (
         <DecisionLog
           decisions={decisions}
+          onView={d => setViewingDec(d)}
           onEdit={d => setEditingDec({ ...d })}
           onDelete={d => setConfirm({
             title: "删除决策记录?",
@@ -173,6 +193,20 @@ export function OkrPage() {
       )}
       {confirm && (
         <ConfirmModal title={confirm.title} body={confirm.body} danger onCancel={() => setConfirm(null)} onConfirm={confirm.onConfirm} />
+      )}
+      {viewingProj && (
+        <ProjectDetail
+          project={viewingProj}
+          onClose={() => setViewingProj(null)}
+          onEdit={p => { setViewingProj(null); setEditingProj({ ...p }); }}
+        />
+      )}
+      {viewingDec && (
+        <DecisionDetail
+          decision={viewingDec}
+          onClose={() => setViewingDec(null)}
+          onEdit={d => { setViewingDec(null); setEditingDec({ ...d }); }}
+        />
       )}
     </div>
   );
@@ -312,7 +346,7 @@ function ObjectiveEditor({ objective: o, onChange, onClose, onSave }) {
   );
 }
 
-function ProjectsTable({ projects, onEdit, onDelete, onNew }) {
+function ProjectsTable({ projects, onView, onEdit, onDelete, onNew }) {
   return (
     <div className="card">
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -327,7 +361,9 @@ function ProjectsTable({ projects, onEdit, onDelete, onNew }) {
           {projects.map(p => (
             <tr key={p.id} style={{ borderBottom: "1px solid var(--border-soft)" }}>
               <td style={{ padding: "12px 14px" }}><span className={`dot dot--${p.health}`} /></td>
-              <td style={{ padding: "12px 14px", fontWeight: 600, color: "var(--fg1)" }}>{p.name}</td>
+              <td style={{ padding: "12px 14px", fontWeight: 600, color: "var(--fg1)" }}>
+                <a onClick={() => onView && onView(p)} style={{ cursor: "pointer", color: "var(--fg1)" }} title="查看项目详情">{p.name}</a>
+              </td>
               <td style={{ padding: "12px 14px" }}><span className="pill pill--indigo num">{p.okr}</span></td>
               <td style={{ padding: "12px 14px", color: "var(--fg2)" }}>{p.owner}</td>
               <td style={{ padding: "12px 14px", color: "var(--fg2)" }}>{p.dept}</td>
@@ -344,6 +380,7 @@ function ProjectsTable({ projects, onEdit, onDelete, onNew }) {
               <td style={{ padding: "12px 14px", color: "var(--fg3)", fontSize: 12, fontFamily: "var(--font-mono)" }}>{p.due}</td>
               <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
                 <div className="row-actions">
+                  <button className="icon-btn" title="详情" onClick={() => onView && onView(p)}><Icon.Eye size={14} /></button>
                   <button className="icon-btn" title="编辑" onClick={() => onEdit(p)}><Icon.Edit size={14} /></button>
                   <button className="icon-btn icon-btn--danger" title="删除" onClick={() => onDelete(p)}><Icon.Trash size={14} /></button>
                 </div>
@@ -475,36 +512,158 @@ function AlignmentMap({ objectives, projects }) {
   );
 }
 
-function DecisionLog({ decisions, onEdit, onDelete, onNew }) {
+function DecisionLog({ decisions, onEdit, onDelete, onNew, onView }) {
+  const grouped = DECISION_STATUSES.map(s => ({ ...s, items: decisions.filter(d => (d.status || "decided") === s.v) })).filter(g => g.items.length > 0);
   return (
-    <div className="card">
+    <div>
       {decisions.length === 0 && (
-        <div style={{ padding: 40, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>
+        <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>
           暂无决策记录 — <a onClick={onNew} style={{ color: "var(--vel-indigo)", cursor: "pointer", textDecoration: "underline" }}>记录第一条</a>
         </div>
       )}
-      {decisions.map((d, i) => (
-        <div key={d.id} style={{ padding: 18, borderTop: i ? "1px solid var(--border-soft)" : "none" }}>
-          <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
-            <div className="row" style={{ gap: 10 }}>
-              <Icon.Quote size={16} style={{ color: "var(--vel-indigo)" }} />
-              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)" }}>{d.title || <span style={{ color: "var(--fg4)", fontWeight: 500 }}>未命名决策</span>}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {grouped.map(g => (
+          <div key={g.v}>
+            <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 4, background: g.color }} />
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{g.label}</div>
+              <span className="num" style={{ fontSize: 11, color: "var(--fg3)" }}>{g.items.length}</span>
             </div>
-            <div className="row" style={{ gap: 8 }}>
-              <span className="pill pill--indigo">关联 {d.linkedKR}</span>
-              <div className="row-actions">
-                <button className="icon-btn" title="编辑" onClick={() => onEdit(d)}><Icon.Edit size={13} /></button>
-                <button className="icon-btn icon-btn--danger" title="删除" onClick={() => onDelete(d)}><Icon.Trash size={13} /></button>
+            <div className="card">
+              {g.items.map((d, i) => {
+                const evidenceCount = (d.evidenceSources || []).length || d.evidence || 0;
+                const dissentCount = (d.dissent || []).length;
+                const assumptionsCount = (d.assumptions || []).length;
+                return (
+                  <div key={d.id} style={{ padding: 16, borderTop: i ? "1px solid var(--border-soft)" : "none", cursor: "pointer" }} onClick={() => onView(d)}>
+                    <div className="row" style={{ justifyContent: "space-between", marginBottom: 6, gap: 10 }}>
+                      <div className="row" style={{ gap: 10, flex: 1, minWidth: 0 }}>
+                        <Icon.Quote size={16} style={{ color: "var(--vel-indigo)", flexShrink: 0 }} />
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)" }}>{d.title || <span style={{ color: "var(--fg4)", fontWeight: 500 }}>未命名决策</span>}</div>
+                      </div>
+                      <div className="row" style={{ gap: 8, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                        {d.linkedKR && <span className="pill pill--indigo">关联 {d.linkedKR}</span>}
+                        <div className="row-actions">
+                          <button className="icon-btn" title="详情" onClick={() => onView(d)}><Icon.Eye size={13} /></button>
+                          <button className="icon-btn" title="编辑" onClick={() => onEdit(d)}><Icon.Edit size={13} /></button>
+                          <button className="icon-btn icon-btn--danger" title="删除" onClick={() => onDelete(d)}><Icon.Trash size={13} /></button>
+                        </div>
+                      </div>
+                    </div>
+                    {d.conclusion && (
+                      <div style={{ fontSize: 12.5, color: "var(--fg2)", lineHeight: 1.55, marginLeft: 26, marginBottom: 6 }}>{d.conclusion}</div>
+                    )}
+                    <div className="row" style={{ gap: 14, fontSize: 11, color: "var(--fg3)", marginLeft: 26, flexWrap: "wrap" }}>
+                      <span><Icon.User size={11} style={{ verticalAlign: "-2px" }} /> {d.owner}</span>
+                      <span><Icon.Calendar size={11} style={{ verticalAlign: "-2px" }} /> {d.date}</span>
+                      <span><Icon.FileText size={11} style={{ verticalAlign: "-2px" }} /> {evidenceCount} 条证据</span>
+                      {assumptionsCount > 0 && <span><Icon.Hash size={11} style={{ verticalAlign: "-2px" }} /> {assumptionsCount} 个关键假设</span>}
+                      {dissentCount > 0 && <span style={{ color: "var(--warning-text)" }}><Icon.AlertTriangle size={11} style={{ verticalAlign: "-2px" }} /> {dissentCount} 条反对意见</span>}
+                      {d.retrospective && <span style={{ color: "var(--vel-violet)" }}><Icon.RefreshCw size={11} style={{ verticalAlign: "-2px" }} /> 已复盘</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DecisionDetail({ decision: d, onClose, onEdit }) {
+  if (!d) return null;
+  const evidence = (d.evidenceSources || []).map(id => KnowledgeSources.find(s => s.id === id)).filter(Boolean);
+  const status = DECISION_STATUSES.find(s => s.v === (d.status || "decided")) || DECISION_STATUSES[0];
+  const linkedQuestion = d.linkedQuestion ? StrategyQuestions.find(q => q.id === d.linkedQuestion) : null;
+
+  return (
+    <Modal
+      title={d.title}
+      sub={`${d.owner || "—"} · ${d.date || "—"}`}
+      large
+      onClose={onClose}
+      foot={<>
+        <button className="btn btn--ghost btn--sm" onClick={onClose}>关闭</button>
+        <button className="btn btn--primary btn--sm" onClick={() => onEdit(d)}><Icon.Edit size={13} /> 编辑决策</button>
+      </>}
+    >
+      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <span className="pill" style={{ background: status.color + "20", color: status.color, fontWeight: 600 }}>{status.label}</span>
+        {d.linkedKR && <span className="pill pill--indigo">关联 {d.linkedKR}</span>}
+        {linkedQuestion && <span className="pill pill--info"><Icon.Compass size={10} /> 来自 {linkedQuestion.title}</span>}
+      </div>
+
+      {d.question && (
+        <Block icon={<Icon.AtSign size={14} style={{ color: "var(--vel-indigo)" }} />} label="决策问题">
+          <div style={{ fontSize: 13, color: "var(--fg1)", lineHeight: 1.6 }}>{d.question}</div>
+        </Block>
+      )}
+      {d.conclusion && (
+        <Block icon={<Icon.Check size={14} style={{ color: "var(--success)" }} />} label="结论">
+          <div style={{ fontSize: 13, color: "var(--fg1)", lineHeight: 1.6, padding: "10px 12px", background: "#DCFCE7", borderRadius: 8 }}>{d.conclusion}</div>
+        </Block>
+      )}
+      {(d.assumptions || []).length > 0 && (
+        <Block icon={<Icon.Hash size={14} style={{ color: "var(--vel-indigo)" }} />} label={`关键假设 (${d.assumptions.length})`}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {d.assumptions.map((a, i) => (
+              <div key={i} style={{ padding: "8px 12px", background: "var(--vel-indigo-50)", border: "1px solid var(--vel-indigo-100)", borderRadius: 8, fontSize: 13, color: "var(--fg1)", lineHeight: 1.5 }}>
+                <span className="num" style={{ color: "var(--vel-indigo-700)", fontWeight: 800, marginRight: 8 }}>A{i + 1}</span>{a}
               </div>
-            </div>
+            ))}
           </div>
-          <div className="row" style={{ gap: 14, fontSize: 12, color: "var(--fg3)", marginLeft: 26 }}>
-            <span><Icon.User size={11} style={{ verticalAlign: "-2px" }} /> {d.owner}</span>
-            <span><Icon.Calendar size={11} style={{ verticalAlign: "-2px" }} /> {d.date}</span>
-            <span><Icon.FileText size={11} style={{ verticalAlign: "-2px" }} /> {d.evidence} 条证据</span>
+        </Block>
+      )}
+      {(d.dissent || []).length > 0 && (
+        <Block icon={<Icon.AlertTriangle size={14} style={{ color: "var(--warning)" }} />} label={`反对 / 保留意见 (${d.dissent.length})`}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {d.dissent.map((c, i) => {
+              const ag = Agents.find(a => a.id === c.agent);
+              return (
+                <div key={i} style={{ padding: "10px 12px", border: "1px solid var(--border-soft)", borderLeft: "3px solid var(--warning)", borderRadius: 8 }}>
+                  {ag && (
+                    <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+                      <span className="pill" style={{ background: ag.color.startsWith("var(") ? "rgba(245,158,11,0.18)" : ag.color + "20", color: ag.color.startsWith("var(") ? "var(--warning-text)" : ag.color, fontWeight: 600 }}>{ag.name}</span>
+                      <span style={{ fontSize: 11, color: "var(--fg3)" }}>{ag.role}</span>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 13, color: "var(--fg1)", lineHeight: 1.5 }}>{c.text}</div>
+                </div>
+              );
+            })}
           </div>
-        </div>
-      ))}
+        </Block>
+      )}
+      {evidence.length > 0 && (
+        <Block icon={<Icon.FileText size={14} style={{ color: "var(--success)" }} />} label={`证据来源 (${evidence.length})`}>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            {evidence.map(s => (
+              <span key={s.id} className="pill pill--indigo">
+                <Icon.FileText size={11} /> {s.title}
+              </span>
+            ))}
+          </div>
+        </Block>
+      )}
+      {d.retrospective && (
+        <Block icon={<Icon.RefreshCw size={14} style={{ color: "var(--vel-violet)" }} />} label="复盘">
+          <div style={{ fontSize: 13, color: "var(--fg1)", lineHeight: 1.6, padding: "10px 12px", background: "#F5F3FF", borderRadius: 8 }}>{d.retrospective}</div>
+        </Block>
+      )}
+    </Modal>
+  );
+}
+
+function Block({ icon, label, children }) {
+  return (
+    <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+      <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+        {icon}
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+      </div>
+      {children}
     </div>
   );
 }
@@ -513,10 +672,26 @@ function DecisionEditor({ decision: d, objectives, onChange, onClose, onSave }) 
   function set(k, v) { onChange({ ...d, [k]: v }); }
   const allKRs = objectives.flatMap(o => o.krs.map(k => ({ id: k.id, label: `${o.code} · ${k.title || k.id}` })));
   const valid = d.title.trim().length > 0;
+  function setAssumption(i, v) {
+    const a = (d.assumptions || []).slice(); a[i] = v; set("assumptions", a);
+  }
+  function addAssumption() { set("assumptions", [...(d.assumptions || []), ""]); }
+  function delAssumption(i) { set("assumptions", (d.assumptions || []).filter((_, j) => j !== i)); }
+  function setDissent(i, k, v) {
+    const a = (d.dissent || []).slice(); a[i] = { ...a[i], [k]: v }; set("dissent", a);
+  }
+  function addDissent() { set("dissent", [...(d.dissent || []), { agent: "ag-risk", text: "" }]); }
+  function delDissent(i) { set("dissent", (d.dissent || []).filter((_, j) => j !== i)); }
+  function toggleEvidence(id) {
+    const cur = d.evidenceSources || [];
+    set("evidenceSources", cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]);
+  }
+
   return (
     <Modal
       title={d.__isNew ? "记录决策" : "编辑决策"}
       sub="决策日志会进入'公司知识中心',作为可追溯的策略历史。"
+      large
       onClose={onClose}
       foot={<>
         <button className="btn btn--ghost btn--sm" onClick={onClose}>取消</button>
@@ -526,31 +701,109 @@ function DecisionEditor({ decision: d, objectives, onChange, onClose, onSave }) 
       </>}
     >
       <div className="field">
-        <label className="field__label">决策内容 *</label>
+        <label className="field__label">决策标题 *</label>
         <textarea className="textarea" value={d.title} onChange={e => set("title", e.target.value)} placeholder="例如:全屋净水 2.0 产品定位收敛为'局改焕新'" />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+
+      <div className="field">
+        <label className="field__label">决策问题 (Question)</label>
+        <textarea className="textarea" value={d.question || ""} onChange={e => set("question", e.target.value)} placeholder="例如:全屋净水 2.0 应该面向新房刚需还是局改用户?" />
+      </div>
+
+      <div className="field">
+        <label className="field__label">结论 (Conclusion)</label>
+        <textarea className="textarea" value={d.conclusion || ""} onChange={e => set("conclusion", e.target.value)} placeholder="清晰地描述这次决议的最终结论与执行方向。" />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
         <div className="field">
           <label className="field__label">决策人</label>
-          <input className="input" value={d.owner} onChange={e => set("owner", e.target.value)} />
+          <input className="input" value={d.owner || ""} onChange={e => set("owner", e.target.value)} />
         </div>
         <div className="field">
           <label className="field__label">日期</label>
-          <input className="input" type="date" value={d.date} onChange={e => set("date", e.target.value)} />
+          <input className="input" type="date" value={d.date || ""} onChange={e => set("date", e.target.value)} />
+        </div>
+        <div className="field">
+          <label className="field__label">状态</label>
+          <select className="select" value={d.status || "decided"} onChange={e => set("status", e.target.value)}>
+            {DECISION_STATUSES.map(s => <option key={s.v} value={s.v}>{s.label}</option>)}
+          </select>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 12 }}>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <div className="field">
           <label className="field__label">关联 KR</label>
-          <select className="select" value={d.linkedKR} onChange={e => set("linkedKR", e.target.value)}>
-            {allKRs.length === 0 && <option value="">— 无可选 KR —</option>}
+          <select className="select" value={d.linkedKR || ""} onChange={e => set("linkedKR", e.target.value)}>
+            <option value="">— 无 —</option>
             {allKRs.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
           </select>
         </div>
         <div className="field">
-          <label className="field__label">证据条数</label>
-          <input className="input num" type="number" min="0" value={d.evidence} onChange={e => set("evidence", Number(e.target.value))} />
+          <label className="field__label">关联战略问题</label>
+          <select className="select" value={d.linkedQuestion || ""} onChange={e => set("linkedQuestion", e.target.value)}>
+            <option value="">— 无 —</option>
+            {StrategyQuestions.map(q => <option key={q.id} value={q.id}>{q.title.slice(0, 30)}…</option>)}
+          </select>
         </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>关键假设 ({(d.assumptions || []).length})</div>
+          <button className="btn btn--ghost btn--sm" onClick={addAssumption}><Icon.Plus size={12} /> 添加</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {(d.assumptions || []).map((a, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "26px 1fr 28px", gap: 8, alignItems: "center" }}>
+              <span className="num" style={{ fontSize: 11, color: "var(--vel-indigo-700)", fontWeight: 800 }}>A{i + 1}</span>
+              <input className="input" value={a} onChange={e => setAssumption(i, e.target.value)} placeholder="假设条件…" />
+              <button className="icon-btn icon-btn--danger" onClick={() => delAssumption(i)}><Icon.Trash size={13} /></button>
+            </div>
+          ))}
+          {(d.assumptions || []).length === 0 && <div style={{ fontSize: 12, color: "var(--fg4)", padding: "8px 0" }}>尚未添加</div>}
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>反对 / 保留意见 ({(d.dissent || []).length})</div>
+          <button className="btn btn--ghost btn--sm" onClick={addDissent}><Icon.Plus size={12} /> 添加</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {(d.dissent || []).map((c, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "120px 1fr 28px", gap: 8, alignItems: "center" }}>
+              <select className="select" value={c.agent} onChange={e => setDissent(i, "agent", e.target.value)}>
+                {Agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+              <input className="input" value={c.text} onChange={e => setDissent(i, "text", e.target.value)} placeholder="反对意见内容…" />
+              <button className="icon-btn icon-btn--danger" onClick={() => delDissent(i)}><Icon.Trash size={13} /></button>
+            </div>
+          ))}
+          {(d.dissent || []).length === 0 && <div style={{ fontSize: 12, color: "var(--fg4)", padding: "8px 0" }}>尚未添加</div>}
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>证据来源 ({(d.evidenceSources || []).length})</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 180, overflow: "auto", padding: 4 }}>
+          {KnowledgeSources.map(s => {
+            const checked = (d.evidenceSources || []).includes(s.id);
+            return (
+              <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 6, background: checked ? "var(--vel-indigo-50)" : "var(--slate-50)", cursor: "pointer" }}>
+                <input type="checkbox" checked={checked} onChange={() => toggleEvidence(s.id)} />
+                <span style={{ fontSize: 13, color: "var(--fg1)", flex: 1 }}>{s.title}</span>
+                <span className="pill pill--neutral">{s.scope}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="field__label">复盘 (执行后回填)</label>
+        <textarea className="textarea" value={d.retrospective || ""} onChange={e => set("retrospective", e.target.value)} placeholder="决策实际效果如何?有哪些假设被证伪?有哪些值得沉淀的经验?" />
       </div>
     </Modal>
   );

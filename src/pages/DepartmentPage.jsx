@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { Icon, KpiCard, Progress, HealthPill } from "../components/primitives.jsx";
-import { Departments, KnowledgeDomains, SkillPacks, Company } from "../data/seed.js";
+import { Icon, KpiCard, Progress, HealthPill, ConfirmModal, makeId } from "../components/primitives.jsx";
+import { ProjectEditor } from "./OkrPage.jsx";
+import { ProjectDetail } from "../components/ProjectDetail.jsx";
+import { Departments, KnowledgeDomains, SkillPacks, Company, Projects, Objectives } from "../data/seed.js";
 
 export function DepartmentPage({ deptId }) {
   const dept = Departments.find(d => d.id === deptId) || Departments[0];
@@ -339,10 +341,108 @@ function DeptWorkflows() {
 }
 
 function DeptProjects({ dept }) {
+  const isMine = (p) => p.deptId === dept.id || p.dept === dept.name || (p.dept || "").includes(dept.name);
+  const seedFiltered = Projects.filter(isMine);
+  const seed = seedFiltered.length ? seedFiltered : Projects.slice(0, 3).map(p => ({ ...p, deptId: dept.id, dept: dept.name }));
+
+  const [list, setList] = useState(() => seed.map(p => ({ ...p })));
+  const [editing, setEditing] = useState(null);
+  const [viewing, setViewing] = useState(null);
+  const [confirm, setConfirm] = useState(null);
+
+  function save(next) {
+    setList(prev => {
+      const i = prev.findIndex(p => p.id === next.id);
+      if (i === -1) return [next, ...prev];
+      const cp = prev.slice(); cp[i] = next; return cp;
+    });
+    setEditing(null);
+  }
+  function del(id) { setList(prev => prev.filter(p => p.id !== id)); setConfirm(null); }
+  function onNew() {
+    setEditing({
+      id: makeId("proj"), name: "", health: "ok", progress: 0,
+      owner: dept.lead || "", deptId: dept.id, dept: dept.name,
+      okr: (Objectives[0] && Objectives[0].code) || "O1",
+      milestone: "", due: "2026-12-31", risks: 0,
+      milestones: [], risksDetail: [], contributors: [], linkedDecisions: [], linkedSources: [],
+      __isNew: true
+    });
+  }
+
   return (
-    <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>
-      <div style={{ marginBottom: 8 }}>{dept.name} 项目 CRUD — 在「OKR 与关键项目」总表中按部门过滤即可管理。</div>
-      <button className="btn btn--ghost btn--sm"><Icon.Plus size={12} /> 新增项目</button>
+    <div>
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: "var(--fg3)" }}>
+          共 <strong className="num" style={{ color: "var(--fg1)" }}>{list.length}</strong> 个关键项目 · 关联部门 <strong style={{ color: "var(--fg1)" }}>{dept.name}</strong>
+        </div>
+        <button className="btn btn--primary btn--sm" onClick={onNew}><Icon.Plus size={13} /> 新增项目</button>
+      </div>
+      <div className="card">
+        <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+          <thead style={{ background: "var(--slate-50)" }}>
+            <tr style={{ textAlign: "left" }}>
+              {["项目", "OKR", "负责人", "里程碑", "进度", "风险", "截止", ""].map((h, i) => <th key={i} style={{ padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "var(--fg3)", textTransform: "uppercase" }}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {list.map(p => (
+              <tr key={p.id} style={{ borderTop: "1px solid var(--border-soft)" }}>
+                <td style={{ padding: "12px 14px" }}>
+                  <span className={`dot dot--${p.health}`} />
+                  <a onClick={() => setViewing(p)} style={{ cursor: "pointer", color: "var(--fg1)", fontWeight: 600, marginLeft: 8 }}>
+                    {p.name || <span style={{ color: "var(--fg4)", fontWeight: 500 }}>未命名</span>}
+                  </a>
+                </td>
+                <td style={{ padding: "12px 14px" }}><span className="pill pill--indigo num">{p.okr}</span></td>
+                <td style={{ padding: "12px 14px", color: "var(--fg2)" }}>{p.owner || "—"}</td>
+                <td style={{ padding: "12px 14px", color: "var(--fg2)" }}>{p.milestone || "—"}</td>
+                <td style={{ padding: "12px 14px", width: 160 }}><div className="row" style={{ gap: 8 }}><div style={{ flex: 1 }}><Progress value={p.progress} status={p.health} /></div><span className="num" style={{ fontSize: 11 }}>{p.progress}%</span></div></td>
+                <td style={{ padding: "12px 14px" }}>{p.risks > 0 ? <span className={`pill ${p.risks > 3 ? 'pill--danger' : 'pill--warn'}`}>⚠ {p.risks}</span> : <span style={{ color: "var(--fg4)", fontSize: 11 }}>—</span>}</td>
+                <td style={{ padding: "12px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--fg3)" }}>{p.due}</td>
+                <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+                  <div className="row-actions">
+                    <button className="icon-btn" title="详情" onClick={() => setViewing(p)}><Icon.Eye size={13} /></button>
+                    <button className="icon-btn" title="编辑" onClick={() => setEditing({ ...p })}><Icon.Edit size={13} /></button>
+                    <button className="icon-btn icon-btn--danger" title="删除" onClick={() => setConfirm({ p })}><Icon.Trash size={13} /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {list.length === 0 && (
+              <tr><td colSpan={8} style={{ padding: 36, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>
+                {dept.name} 暂无项目 — <a onClick={onNew} style={{ color: "var(--vel-indigo)", cursor: "pointer", textDecoration: "underline" }}>新增第一个</a>
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {editing && (
+        <ProjectEditor
+          project={editing}
+          objectives={Objectives}
+          onChange={setEditing}
+          onClose={() => setEditing(null)}
+          onSave={() => save(editing)}
+        />
+      )}
+      {viewing && (
+        <ProjectDetail
+          project={viewing}
+          onClose={() => setViewing(null)}
+          onEdit={p => { setViewing(null); setEditing({ ...p }); }}
+        />
+      )}
+      {confirm && (
+        <ConfirmModal
+          title="删除项目?"
+          body={<>将从 <b>{dept.name}</b> 移除项目 <b>"{confirm.p.name}"</b>。该操作仅在本部门视图生效。</>}
+          danger
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => del(confirm.p.id)}
+        />
+      )}
     </div>
   );
 }

@@ -1,37 +1,51 @@
 import React, { useState } from "react";
 import { Icon } from "../components/primitives.jsx";
-import { StrategyQuestion, Agents, DebateMessages, KnowledgeSources } from "../data/seed.js";
+import { StrategyQuestion, StrategyQuestions, STRATEGY_STATUSES, Agents, DebateMessages, KnowledgeSources } from "../data/seed.js";
 
 export function StrategyPage() {
   const [tab, setTab] = useState("canvas");
+  const [questionId, setQuestionId] = useState(StrategyQuestion.id);
+  const question = StrategyQuestions.find(q => q.id === questionId) || StrategyQuestion;
+  const status = STRATEGY_STATUSES.find(s => s.v === question.status) || STRATEGY_STATUSES[0];
+  const eyebrow = question.status === "decided"
+    ? `战略工作台 · 已定调`
+    : question.status === "draft"
+      ? `战略工作台 · 草稿`
+      : `战略工作台 · 第 ${question.rounds || 1} 轮研讨`;
+  const isPrimary = question.id === StrategyQuestion.id; // we have full canvas/war for the seeded one
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--header-h))" }}>
       <div style={{ padding: "16px 28px 0", borderBottom: "1px solid var(--border-soft)", background: "#fff" }}>
         <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--vel-indigo)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>战略工作台 · 第 3 轮研讨</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: "var(--fg1)", letterSpacing: "-0.01em" }}>{StrategyQuestion.title}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--vel-indigo)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>{eyebrow}</div>
+            <div className="row" style={{ gap: 10 }}>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "var(--fg1)", letterSpacing: "-0.01em" }}>{question.title}</div>
+              <span className="pill" style={{ background: status.color + "20", color: status.color, fontWeight: 600 }}>{status.label}</span>
+            </div>
             <div className="row" style={{ gap: 10, fontSize: 12, color: "var(--fg3)", marginTop: 4 }}>
-              <span><Icon.User size={11} style={{ verticalAlign: "-2px" }} /> {StrategyQuestion.asker}</span>
+              <span><Icon.User size={11} style={{ verticalAlign: "-2px" }} /> {question.asker}</span>
               <span>·</span>
-              <span>{StrategyQuestion.asked}</span>
+              <span>{question.asked}</span>
               <span>·</span>
-              <span>关联 OKR <strong style={{ color: "var(--vel-indigo-700)" }}>{StrategyQuestion.okrs.join(", ")}</strong></span>
+              <span>关联 OKR <strong style={{ color: "var(--vel-indigo-700)" }}>{(question.okrs || []).join(", ") || "—"}</strong></span>
               <span>·</span>
-              <span>{StrategyQuestion.context.length} 条背景资料</span>
+              <span>{(question.context || []).length} 条背景资料</span>
             </div>
           </div>
           <div className="row" style={{ gap: 8 }}>
             <button className="btn btn--ghost btn--sm"><Icon.Save size={13} /> 保存</button>
-            <button className="btn btn--ghost btn--sm"><Icon.Pause size={13} /> 暂停研讨</button>
+            <button className="btn btn--ghost btn--sm"><Icon.Plus size={13} /> 提出新问题</button>
             <button className="btn btn--primary btn--sm"><Icon.Sparkles size={13} /> 生成 OKR / 项目草案</button>
           </div>
         </div>
         <div className="tabs" style={{ marginBottom: 0, borderBottom: "none" }}>
           {[
+            { id: "registry", label: "战略问题", count: StrategyQuestions.length },
             { id: "canvas", label: "画布 (Spatial)" },
             { id: "war", label: "War Council" },
-            { id: "options", label: "战略选项", count: 3 },
+            { id: "options", label: "战略选项", count: question.optionsCount || 0 },
             { id: "output", label: "结构化输出" }
           ].map(t => (
             <div key={t.id} className={`tab ${tab === t.id ? "is-active" : ""}`} onClick={() => setTab(t.id)}>
@@ -42,10 +56,99 @@ export function StrategyPage() {
       </div>
 
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
-        {tab === "canvas" && <StrategyCanvas />}
-        {tab === "war" && <WarCouncil />}
-        {tab === "options" && <StrategyOptions />}
-        {tab === "output" && <StructuredOutput />}
+        {tab === "registry" && <QuestionRegistry currentId={questionId} onSelect={(id) => { setQuestionId(id); setTab("canvas"); }} />}
+        {tab === "canvas" && (isPrimary ? <StrategyCanvas /> : <StrategyPlaceholder question={question} variant="canvas" />)}
+        {tab === "war" && (isPrimary ? <WarCouncil /> : <StrategyPlaceholder question={question} variant="war" />)}
+        {tab === "options" && (isPrimary ? <StrategyOptions /> : <StrategyPlaceholder question={question} variant="options" />)}
+        {tab === "output" && (isPrimary ? <StructuredOutput /> : <StrategyPlaceholder question={question} variant="output" />)}
+      </div>
+    </div>
+  );
+}
+
+function QuestionRegistry({ currentId, onSelect }) {
+  const groups = STRATEGY_STATUSES.map(s => ({
+    ...s,
+    items: StrategyQuestions.filter(q => q.status === s.v)
+  })).filter(g => g.items.length > 0);
+
+  return (
+    <div className="scroll" style={{ height: "100%", overflow: "auto", padding: 32, background: "var(--bg-page)" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ fontSize: 13, color: "var(--fg2)", marginBottom: 18, lineHeight: 1.6 }}>
+          战略问题 (Strategy Questions) 是 Velocity 的核心战略资产 — 它把"想法 → 研讨 → 选项 → 决策 → OKR / 关键项目"沉淀成可追溯的工作流。
+          点击任一问题进入研讨画布。
+        </div>
+
+        {groups.map(g => (
+          <div key={g.v} style={{ marginBottom: 22 }}>
+            <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 4, background: g.color }} />
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{g.label}</div>
+              <span className="num" style={{ fontSize: 11, color: "var(--fg3)" }}>{g.items.length}</span>
+            </div>
+            <div className="grid grid-cols-2">
+              {g.items.map(q => {
+                const isCurrent = q.id === currentId;
+                return (
+                  <div key={q.id}
+                    onClick={() => onSelect(q.id)}
+                    className="card"
+                    style={{
+                      padding: 18,
+                      cursor: "pointer",
+                      borderColor: isCurrent ? "var(--vel-indigo)" : "var(--border-soft)",
+                      borderWidth: isCurrent ? 2 : 1,
+                      borderStyle: "solid"
+                    }}
+                  >
+                    <div className="row" style={{ justifyContent: "space-between", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
+                      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                        {(q.okrs || []).map(o => <span key={o} className="pill pill--indigo num">关联 {o}</span>)}
+                      </div>
+                      {isCurrent && <span className="pill pill--info">当前</span>}
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--fg1)", marginBottom: 6, lineHeight: 1.4 }}>{q.title}</div>
+                    <div style={{ fontSize: 12, color: "var(--fg2)", lineHeight: 1.6, marginBottom: 12 }}>{q.summary}</div>
+                    <div className="row" style={{ gap: 12, fontSize: 11, color: "var(--fg3)", flexWrap: "wrap" }}>
+                      <span><Icon.User size={11} style={{ verticalAlign: "-2px" }} /> {q.asker}</span>
+                      <span><Icon.Calendar size={11} style={{ verticalAlign: "-2px" }} /> {q.asked}</span>
+                      <span><Icon.Users size={11} style={{ verticalAlign: "-2px" }} /> {q.agents.length} 个 Agent</span>
+                      {q.rounds > 0 && <span><Icon.Activity size={11} style={{ verticalAlign: "-2px" }} /> {q.rounds} 轮研讨</span>}
+                      {q.optionsCount > 0 && <span><Icon.GitBranch size={11} style={{ verticalAlign: "-2px" }} /> {q.optionsCount} 个选项</span>}
+                      {q.decisionId && <span style={{ color: "var(--success-text)" }}><Icon.Quote size={11} style={{ verticalAlign: "-2px" }} /> 已沉淀决策</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StrategyPlaceholder({ variant }) {
+  const map = {
+    canvas: { title: "尚未生成研讨画布", body: "切换到「战略问题」选择当前研讨,或点击下方启动多 Agent 研讨。" },
+    war: { title: "尚无 War Council 记录", body: "本问题尚未运行多轮研讨。启动后可查看每位 Agent 的赞成 / 反对 / 保留立场和证据来源。" },
+    options: { title: "尚未生成战略选项", body: "完成至少一轮研讨后,Velocity 会基于不同假设生成 2-3 个候选方案供管理层比较。" },
+    output: { title: "尚未生成结构化输出", body: "决议确认后,Velocity 会自动生成 Objective / KR / 关键项目草案与决策日志条目。" }
+  };
+  const c = map[variant] || map.canvas;
+  return (
+    <div className="scroll" style={{ height: "100%", overflow: "auto", padding: 32, background: "var(--bg-page)" }}>
+      <div style={{ maxWidth: 720, margin: "60px auto 0" }}>
+        <div className="card" style={{ padding: 36, textAlign: "center" }}>
+          <Icon.Compass size={36} style={{ color: "var(--fg4)", margin: "0 auto 12px" }} />
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--fg1)", marginBottom: 6 }}>{c.title}</div>
+          <div style={{ fontSize: 13, color: "var(--fg3)", lineHeight: 1.6, marginBottom: 18 }}>{c.body}</div>
+          <div className="row" style={{ gap: 8, justifyContent: "center" }}>
+            <button className="btn btn--ghost btn--sm"><Icon.FileText size={13} /> 添加背景资料</button>
+            <button className="btn btn--primary btn--sm"><Icon.Sparkles size={13} /> 启动多 Agent 研讨</button>
+          </div>
+        </div>
       </div>
     </div>
   );

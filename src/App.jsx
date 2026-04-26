@@ -7,6 +7,7 @@ import { StrategyPage } from "./pages/StrategyPage.jsx";
 import { DepartmentsIndex } from "./pages/DepartmentsIndex.jsx";
 import { DepartmentPage } from "./pages/DepartmentPage.jsx";
 import { SkillsPage } from "./pages/SkillsPage.jsx";
+import { WorkflowsPage } from "./pages/WorkflowsPage.jsx";
 import { AssistantsPage, GovernancePage } from "./pages/AssistantsAndGovernance.jsx";
 import { AdminPage } from "./pages/AdminPage.jsx";
 
@@ -22,6 +23,7 @@ export default function App() {
       case "departments": return <DepartmentsIndex setRoute={setRoute} />;
       case "department": return <DepartmentPage deptId={route.deptId || "industrial-design"} setRoute={setRoute} />;
       case "skills": return <SkillsPage />;
+      case "workflows": return <WorkflowsPage />;
       case "assistants": return <AssistantsPage setRoute={setRoute} />;
       case "governance": return <GovernancePage />;
       case "admin": return <AdminPage />;
