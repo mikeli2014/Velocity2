@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { Icon, KpiCard, Modal } from "../components/primitives.jsx";
 import { RunDialog } from "../components/RunDialog.jsx";
 import {
-  Workflows, WorkflowRuns, WORKFLOW_STATUSES,
+  Workflows, WorkflowRuns as SeedWorkflowRuns, WORKFLOW_STATUSES,
   Departments, SkillPacks, KnowledgeDomains
 } from "../data/seed.js";
 
@@ -27,6 +27,20 @@ export function WorkflowsPage() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [viewing, setViewing] = useState(null);
   const [running, setRunning] = useState(null);
+  const [runs, setRuns] = useState(() => SeedWorkflowRuns.map(r => ({ ...r })));
+
+  function persistRun({ item, input, duration, startedAt }) {
+    setRuns(prev => [{
+      id: `run-${Date.now().toString(36)}`,
+      workflowId: item.id,
+      trigger: input.trim().slice(0, 60) || "(直接运行)",
+      actor: "当前用户",
+      started: startedAt,
+      duration,
+      status: "ok",
+      output: `已基于 ${(item.linkedDomains || []).length || "若干"} 条知识完成 ${item.output || "输出"}`
+    }, ...prev]);
+  }
 
   const filtered = useMemo(() => Workflows.filter(w => {
     if (filterDept !== "all" && w.deptId !== filterDept) return false;
@@ -34,12 +48,12 @@ export function WorkflowsPage() {
     return true;
   }), [filterDept, filterStatus]);
 
-  const statsToday = useMemo(() => ({
+  const statsToday = {
     total: Workflows.length,
     published: Workflows.filter(w => w.status === "published").length,
-    runs: WorkflowRuns.length,
-    fails: WorkflowRuns.filter(r => r.status === "fail").length
-  }), []);
+    runs: runs.length,
+    fails: runs.filter(r => r.status === "fail").length
+  };
 
   return (
     <div className="content fade-in">
@@ -63,14 +77,14 @@ export function WorkflowsPage() {
       <div className="grid grid-cols-4" style={{ marginBottom: 24 }}>
         <KpiCard label="工作流模板" value={statsToday.total} delta={`+1`} status="up" spark={[3, 4, 5, 6, 7, 7, 8, statsToday.total]} color="var(--vel-indigo)" />
         <KpiCard label="已发布" value={statsToday.published} delta="+1" status="up" spark={[3, 4, 5, 5, 6, 6, 7, statsToday.published]} color="#10b981" />
-        <KpiCard label="本周执行次数" value="3,438" delta="+412" status="up" spark={[1800, 2100, 2400, 2600, 2800, 3000, 3200, 3438]} color="#7c3aed" />
-        <KpiCard label="失败 / 阻塞" value={statsToday.fails} delta="-1" status="up" spark={[3, 3, 2, 2, 2, 1, 1, statsToday.fails]} color="#f59e0b" />
+        <KpiCard label="本周执行次数" value={(3438 + (runs.length - SeedWorkflowRuns.length)).toLocaleString()} delta="+412" status="up" spark={[1800, 2100, 2400, 2600, 2800, 3000, 3200, 3438 + (runs.length - SeedWorkflowRuns.length)]} color="#7c3aed" />
+        <KpiCard label="失败 / 阻塞" value={runs.filter(r => r.status === "fail").length} delta="-1" status="up" spark={[3, 3, 2, 2, 2, 1, 1, runs.filter(r => r.status === "fail").length]} color="#f59e0b" />
       </div>
 
       <div className="tabs">
         {[
           { id: "templates", label: "工作流模板", count: filtered.length },
-          { id: "runs", label: "运行记录", count: WorkflowRuns.length },
+          { id: "runs", label: "运行记录", count: runs.length },
           { id: "library", label: "技能 × 知识域映射" }
         ].map(t => (
           <div key={t.id} className={`tab ${tab === t.id ? "is-active" : ""}`} onClick={() => setTab(t.id)}>
@@ -112,11 +126,18 @@ export function WorkflowsPage() {
         </div>
       )}
 
-      {tab === "runs" && <RunsTable runs={WorkflowRuns} />}
+      {tab === "runs" && <RunsTable runs={runs} />}
       {tab === "library" && <SkillDomainMap />}
 
       {viewing && <WorkflowDetail w={viewing} onClose={() => setViewing(null)} onRun={(w) => { setViewing(null); setRunning(w); }} />}
-      {running && <RunDialog kind="workflow" item={running} onClose={() => setRunning(null)} />}
+      {running && (
+        <RunDialog
+          kind="workflow"
+          item={running}
+          onClose={() => setRunning(null)}
+          onComplete={persistRun}
+        />
+      )}
     </div>
   );
 }

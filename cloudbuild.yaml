@@ -1,0 +1,88 @@
+# Cloud Build pipeline for Velocity OS.
+#
+# Flow:  build image → push → deploy to Cloud Run → run Playwright e2e
+#        against the live URL.  If the e2e step fails the build is marked
+#        failed (the deploy itself isn't rolled back; revert via the
+#        Cloud Run revisions UI or a follow-up commit).
+#
+# Substitution variables (override in the trigger if needed):
+#   _SERVICE   — Cloud Run service name (default: velocity2)
+#   _REGION    — Cloud Run region        (default: us-east1)
+#   _BASE_URL  — public URL passed to Playwright; falls back to the
+#                deterministic Run URL pattern.
+
+substitutions:
+  _SERVICE: velocity2
+  _REGION: us-east1
+  _BASE_URL: https://velocity2-802659517720.us-east1.run.app
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # 1. Build the production image
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - gcr.io/$PROJECT_ID/${_SERVICE}:$COMMIT_SHA
+      - -t
+      - gcr.io/$PROJECT_ID/${_SERVICE}:latest
+      - .
+
+  # 2. Push to Artifact / Container Registry
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: ["push", "--all-tags", "gcr.io/$PROJECT_ID/${_SERVICE}"]
+    waitFor: ["build"]
+
+  # 3. Deploy to Cloud Run
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=gcr.io/$PROJECT_ID/${_SERVICE}:$COMMIT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+    waitFor: ["push"]
+
+  # 4. Smoke-test the live URL with Playwright
+  - id: e2e
+    name: mcr.microsoft.com/playwright:v1.59.1-jammy
+    entrypoint: bash
+    env:
+      - "BASE_URL=${_BASE_URL}"
+      - "CI=1"
+    args:
+      - -ceu
+      - |
+        npm ci --no-audit --no-fund
+        npx playwright test --project=chromium --reporter=list
+    waitFor: ["deploy"]
+
+  # 5. Upload the HTML report so failures are inspectable from the
+  #    Cloud Build UI (useful when retries don't help).
+  - id: archive-report
+    name: gcr.io/cloud-builders/gsutil
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if [ -d playwright-report ]; then
+          gsutil -m cp -r playwright-report \
+            gs://${PROJECT_ID}_cloudbuild/playwright/${BUILD_ID} || true
+        fi
+    waitFor: ["e2e"]
+
+images:
+  - gcr.io/$PROJECT_ID/${_SERVICE}:$COMMIT_SHA
+  - gcr.io/$PROJECT_ID/${_SERVICE}:latest
+
+# Give Playwright + dep install enough headroom on a cold cache.
+timeout: 1800s

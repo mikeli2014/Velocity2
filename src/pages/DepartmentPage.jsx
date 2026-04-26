@@ -1,19 +1,21 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Icon, KpiCard, Progress, HealthPill, ConfirmModal, Modal, makeId } from "../components/primitives.jsx";
 import { ProjectEditor } from "./OkrPage.jsx";
 import { ProjectDetail } from "../components/ProjectDetail.jsx";
 import { RunDialog } from "../components/RunDialog.jsx";
-import { Departments, KnowledgeDomains, SkillPacks, Company, Projects, Objectives, Workflows, DeptActivity } from "../data/seed.js";
+import { Departments, KnowledgeDomains, SkillPacks, KnowledgeSources, Company, Projects, Objectives, Workflows, DeptActivity } from "../data/seed.js";
 
 export function DepartmentPage({ deptId }) {
+  // Department record is derived from `deptId`; user edits in the
+  // configuration modal layer on top via per-deptId override map. This
+  // way switching departments doesn't need an effect to reset state.
   const baseDept = Departments.find(d => d.id === deptId) || Departments[0];
-  const [dept, setDept] = useState(baseDept);
+  const [overridesByDept, setOverridesByDept] = useState({});
+  const dept = { ...baseDept, ...(overridesByDept[deptId] || {}) };
+  function setDept(next) { setOverridesByDept(o => ({ ...o, [deptId]: next })); }
+
   const [tab, setTab] = useState("overview");
   const [configuring, setConfiguring] = useState(false);
-  useEffect(() => {
-    const next = Departments.find(d => d.id === deptId) || Departments[0];
-    setDept(prev => (prev.id === next.id ? prev : next));
-  }, [deptId]);
   const isID = dept.id === "industrial-design";
 
   const tabs = isID ? [
@@ -675,7 +677,15 @@ function DeptProjects({ dept }) {
 function AssistantChat({ dept }) {
   const initial = [
     { role: "user", text: "PVD 工艺与喷涂在零冷水热水器外壳上,500台试产成本对比?" },
-    { role: "assistant", text: "根据当前部门知识库 (CMF 1,046 条 + 工艺 156 条),给出 500 台试产规模的对比:\n\n• PVD: 单件 ¥38-46,工艺周期 3-4 天,色彩稳定性 ★★★★★\n• 喷涂: 单件 ¥12-18,工艺周期 1-2 天,色彩稳定性 ★★★\n\n建议:外观件用 PVD,内部件用喷涂,综合成本下降约 22%。", sources: ["竞品 CMF 图库 (2025春夏)", "零冷水技术路线图 v2", "供应商能力库 / 杭州东方"], skill: "供应商/材料/工艺检索", okr: ["O1", "O3"] }
+    {
+      role: "assistant",
+      text: "根据当前部门知识库 (CMF 1,046 条 + 工艺 156 条),给出 500 台试产规模的对比:\n\n• PVD: 单件 ¥38-46,工艺周期 3-4 天,色彩稳定性 ★★★★★\n• 喷涂: 单件 ¥12-18,工艺周期 1-2 天,色彩稳定性 ★★★\n\n建议:外观件用 PVD,内部件用喷涂,综合成本下降约 22%。",
+      // Source IDs reference seed.KnowledgeSources so citations stay live.
+      sourceIds: ["ks-5", "ks-8"],
+      sources: ["供应商能力库 / 杭州东方 (内部)"],
+      skill: "供应商/材料/工艺检索",
+      okr: ["O1", "O3"]
+    }
   ];
   const [msgs, setMsgs] = useState(initial);
   const [draft, setDraft] = useState("");
@@ -684,9 +694,27 @@ function AssistantChat({ dept }) {
     setMsgs([...msgs, { role: "user", text: draft }]);
     setDraft("");
     setTimeout(() => {
-      setMsgs(m => [...m, { role: "assistant", text: "已基于公司 OKR 和部门知识为你生成回答(模拟数据)。这里会包含来源引用、推荐的下一步动作,以及可写回到项目/OKR 的入口。", sources: ["奥维 2025Q4 厨卫品类报告"], skill: "奥维数据分析", okr: ["O1"] }]);
+      setMsgs(m => [
+        ...m,
+        {
+          role: "assistant",
+          text: "已基于公司 OKR 和部门知识为你生成回答(模拟数据)。这里会包含来源引用、推荐的下一步动作,以及可写回到项目/OKR 的入口。",
+          sourceIds: ["ks-4"],
+          sources: [],
+          skill: "奥维数据分析",
+          okr: ["O1"]
+        }
+      ]);
     }, 600);
   };
+
+  function openSource(id) {
+    // Lightweight cross-page nav hint: drop a hash so a future deep-link
+    // handler in KnowledgePage can scroll to / open this source.
+    if (typeof window !== "undefined") {
+      window.location.hash = `knowledge:${id}`;
+    }
+  }
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 280px", gap: 20, height: "calc(100vh - 280px)" }}>
       <div className="card" style={{ display: "flex", flexDirection: "column" }}>
@@ -708,9 +736,26 @@ function AssistantChat({ dept }) {
                 <div style={{ background: m.role === "user" ? "var(--vel-indigo)" : "var(--slate-50)", color: m.role === "user" ? "#fff" : "var(--fg1)", padding: "12px 16px", borderRadius: 12, fontSize: 13.5, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
                   {m.text}
                 </div>
-                {m.sources && (
+                {((m.sourceIds && m.sourceIds.length) || (m.sources && m.sources.length)) > 0 && (
                   <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                    {m.sources.map((s, si) => <span key={si} className="pill pill--indigo"><Icon.FileText size={10} /> {s}</span>)}
+                    {(m.sourceIds || []).map(id => {
+                      const src = KnowledgeSources.find(k => k.id === id);
+                      if (!src) return null;
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => openSource(id)}
+                          className="pill pill--indigo"
+                          title={src.summary || src.title}
+                          style={{ cursor: "pointer", border: "none" }}
+                        >
+                          <Icon.FileText size={10} /> {src.title}
+                        </button>
+                      );
+                    })}
+                    {(m.sources || []).map((s, si) => (
+                      <span key={`free-${si}`} className="pill pill--neutral"><Icon.FileText size={10} /> {s}</span>
+                    ))}
                   </div>
                 )}
                 {m.okr && (

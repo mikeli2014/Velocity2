@@ -125,9 +125,21 @@ export function Topbar({ route }) {
           </React.Fragment>
         ))}
       </div>
-      <div className="topbar__search">
+      <div
+        className="topbar__search"
+        onClick={() => window.dispatchEvent(new Event("velocity:open-palette"))}
+        style={{ cursor: "text" }}
+      >
         <Icon.Search size={14} />
-        <input placeholder="搜索知识、项目、OKR、部门、决策…" />
+        <input
+          placeholder="搜索知识、项目、OKR、部门、决策…"
+          readOnly
+          onFocus={(e) => {
+            e.target.blur();
+            window.dispatchEvent(new Event("velocity:open-palette"));
+          }}
+          style={{ cursor: "text" }}
+        />
         <kbd>⌘K</kbd>
       </div>
       <div className="topbar__actions">

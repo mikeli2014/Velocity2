@@ -18,6 +18,14 @@ docs
 Requirement
 README.md
 
+# Test tooling — not part of the served bundle
+tests
+playwright.config.js
+playwright.config.ts
+playwright-report
+test-results
+cloudbuild.yaml
+
 # Local environment files (defense in depth — don't bake secrets into images)
 .env
 .env.*

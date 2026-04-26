@@ -1,6 +1,7 @@
 import React, { useState, lazy, Suspense } from "react";
 import { Sidebar, Topbar } from "./components/Shell.jsx";
 import { Icon } from "./components/primitives.jsx";
+import { CommandPalette } from "./components/CommandPalette.jsx";
 import { HomePage } from "./pages/HomePage.jsx";
 import { KnowledgePage } from "./pages/KnowledgePage.jsx";
 import { OkrPage } from "./pages/OkrPage.jsx";
@@ -29,25 +30,25 @@ function PageFallback() {
   );
 }
 
+function renderPage(route, setRoute) {
+  switch (route.page) {
+    case "home": return <HomePage setRoute={setRoute} />;
+    case "knowledge": return <KnowledgePage />;
+    case "strategy": return <StrategyPage />;
+    case "okr": return <OkrPage />;
+    case "departments": return <DepartmentsIndex setRoute={setRoute} />;
+    case "department": return <DepartmentPage deptId={route.deptId || "industrial-design"} setRoute={setRoute} />;
+    case "skills": return <SkillsPage />;
+    case "workflows": return <WorkflowsPage />;
+    case "assistants": return <AssistantsPage setRoute={setRoute} />;
+    case "governance": return <GovernancePage setRoute={setRoute} />;
+    case "admin": return <AdminPage setRoute={setRoute} />;
+    default: return <HomePage setRoute={setRoute} />;
+  }
+}
+
 export default function App() {
   const [route, setRoute] = useState({ page: "home" });
-
-  const Page = () => {
-    switch (route.page) {
-      case "home": return <HomePage setRoute={setRoute} />;
-      case "knowledge": return <KnowledgePage />;
-      case "strategy": return <StrategyPage />;
-      case "okr": return <OkrPage />;
-      case "departments": return <DepartmentsIndex setRoute={setRoute} />;
-      case "department": return <DepartmentPage deptId={route.deptId || "industrial-design"} setRoute={setRoute} />;
-      case "skills": return <SkillsPage />;
-      case "workflows": return <WorkflowsPage />;
-      case "assistants": return <AssistantsPage setRoute={setRoute} />;
-      case "governance": return <GovernancePage setRoute={setRoute} />;
-      case "admin": return <AdminPage setRoute={setRoute} />;
-      default: return <HomePage setRoute={setRoute} />;
-    }
-  };
 
   return (
     <div className="app">
@@ -55,9 +56,10 @@ export default function App() {
       <div className="main">
         <Topbar route={route} setRoute={setRoute} />
         <Suspense fallback={<PageFallback />}>
-          <Page />
+          {renderPage(route, setRoute)}
         </Suspense>
       </div>
+      <CommandPalette setRoute={setRoute} />
     </div>
   );
 }

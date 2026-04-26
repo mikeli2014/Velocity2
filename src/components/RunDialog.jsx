@@ -5,11 +5,12 @@ import { Icon, Modal } from "./primitives.jsx";
 // Renders the chosen item's step list (or default 3-step shape for skills),
 // animates step state ⇒ pending → running → done, then displays a synthesized
 // output panel with an "Add to project / save as knowledge / copy" action row.
-export function RunDialog({ kind, item, onClose, defaultInput = "", outputBuilder }) {
+export function RunDialog({ kind, item, onClose, defaultInput = "", outputBuilder, onComplete }) {
   const [input, setInput] = useState(defaultInput);
   const [stage, setStage] = useState(-1); // -1 = not started, 0..N = in step i, N+1 = done
   const [running, setRunning] = useState(false);
   const [output, setOutput] = useState(null);
+  const startedAt = useRef(null);
   const timer = useRef(null);
 
   const steps = (item.steps && item.steps.length)
@@ -23,6 +24,7 @@ export function RunDialog({ kind, item, onClose, defaultInput = "", outputBuilde
     setRunning(true);
     setStage(0);
     setOutput(null);
+    startedAt.current = Date.now();
     let i = 0;
     const tick = () => {
       i += 1;
@@ -34,6 +36,17 @@ export function RunDialog({ kind, item, onClose, defaultInput = "", outputBuilde
         const out = outputBuilder ? outputBuilder({ item, input }) : defaultOutput({ item, input });
         setOutput(out);
         setRunning(false);
+        if (onComplete) {
+          const elapsedSec = Math.max(1, Math.round((Date.now() - startedAt.current) / 1000));
+          const mm = Math.floor(elapsedSec / 60);
+          const ss = elapsedSec % 60;
+          onComplete({
+            kind, item, input,
+            output: out,
+            duration: mm > 0 ? `${mm}m ${String(ss).padStart(2, "0")}s` : `${ss}s`,
+            startedAt: new Date().toLocaleTimeString("zh-CN", { hour12: false })
+          });
+        }
       }
     };
     timer.current = setTimeout(tick, 700);
