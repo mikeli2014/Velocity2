@@ -850,3 +850,54 @@ export const DecisionsRich = [
     retrospective: ""
   }
 ];
+
+// =============== Notifications =============================================
+// Inbox-style notifications shown in the topbar dropdown. Each one optionally
+// carries a `link: { page, deptId? }` so click routes to the source page.
+export const Notifications = [
+  {
+    id: "n-1", at: "12 分钟前", category: "project", read: false,
+    title: "全屋净水 2.0 — 局改方案产品化",
+    body: "李慕白 更新了项目进度到 64%,新增 1 个里程碑事件。",
+    link: { page: "okr" }
+  },
+  {
+    id: "n-2", at: "1 小时前", category: "assistant", read: false,
+    title: "🦞 小龙虾助手 完成 8 个工业设计部检索",
+    body: "今日为 78 名设计师回答 412 次问询,平均命中率 91%。",
+    link: { page: "department", deptId: "industrial-design" }
+  },
+  {
+    id: "n-3", at: "2 小时前", category: "risk", read: false,
+    title: "BP/SC/SA 三角协同 200 城落地 · 新增风险",
+    body: "周岚 标注 1 项风险:线上线下同价覆盖率较目标低 14pt。",
+    link: { page: "okr" }
+  },
+  {
+    id: "n-4", at: "今早 09:24", category: "strategy", read: true,
+    title: "战略画布完成第 3 轮多智能体研讨",
+    body: "FY26 是否加大线上 DTC 渠道投入? 7 个 Agent 中 3 赞成 / 1 反对 / 3 保留。",
+    link: { page: "strategy" }
+  },
+  {
+    id: "n-5", at: "今早 08:50", category: "knowledge", read: true,
+    title: "苏婉 上传 38 条 CMF 知识条目",
+    body: "等待 CMF 中台审核;命中后将进入 1,046 条 CMF 知识域。",
+    link: { page: "knowledge" }
+  },
+  {
+    id: "n-6", at: "昨天", category: "audit", read: true,
+    title: "外部 IP 拦截事件",
+    body: "203.0.113.42 尝试以 cop@partner 身份登录,被风控拦截。",
+    link: { page: "governance" }
+  }
+];
+
+export const NOTIFICATION_CATEGORIES = {
+  project:   { label: "项目",   color: "#10b981", icon: "Layers" },
+  assistant: { label: "助手",   color: "#7c3aed", icon: "MessageCircle" },
+  risk:      { label: "风险",   color: "#ef4444", icon: "AlertTriangle" },
+  strategy:  { label: "战略",   color: "#4F46E5", icon: "Compass" },
+  knowledge: { label: "知识",   color: "#0EA5E9", icon: "Database" },
+  audit:     { label: "审计",   color: "#f59e0b", icon: "Shield" }
+};

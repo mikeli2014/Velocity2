@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from "react";
-import { Icon, KpiCard, Modal } from "../components/primitives.jsx";
+import { Icon, KpiCard, Modal, ConfirmModal, makeId } from "../components/primitives.jsx";
 import { RunDialog } from "../components/RunDialog.jsx";
 import {
-  Workflows, WorkflowRuns as SeedWorkflowRuns, WORKFLOW_STATUSES,
+  Workflows as SeedWorkflows, WorkflowRuns as SeedWorkflowRuns, WORKFLOW_STATUSES,
   Departments, SkillPacks, KnowledgeDomains
 } from "../data/seed.js";
 
@@ -27,6 +27,9 @@ export function WorkflowsPage() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [viewing, setViewing] = useState(null);
   const [running, setRunning] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [confirm, setConfirm] = useState(null);
+  const [list, setList] = useState(() => SeedWorkflows.map(w => ({ ...w, steps: w.steps.map(s => ({ ...s })) })));
   const [runs, setRuns] = useState(() => SeedWorkflowRuns.map(r => ({ ...r })));
 
   function persistRun({ item, input, duration, startedAt }) {
@@ -42,15 +45,40 @@ export function WorkflowsPage() {
     }, ...prev]);
   }
 
-  const filtered = useMemo(() => Workflows.filter(w => {
+  function saveTemplate(next) {
+    setList(prev => {
+      const i = prev.findIndex(w => w.id === next.id);
+      const clean = { ...next };
+      delete clean.__isNew;
+      if (i === -1) return [clean, ...prev];
+      const cp = prev.slice(); cp[i] = clean; return cp;
+    });
+    setEditing(null);
+  }
+  function deleteTemplate(id) { setList(prev => prev.filter(w => w.id !== id)); setConfirm(null); }
+  function newTemplate() {
+    setEditing({
+      id: makeId("wf"),
+      name: "", description: "",
+      deptId: Departments[0]?.id || "industrial-design",
+      owner: "", status: "draft", version: "v0.1.0", icon: "Workflow",
+      input: "", output: "", avgTime: "约 5 分钟",
+      uses: 0, lastRun: "—",
+      linkedSkills: [], linkedDomains: [],
+      steps: [{ id: makeId("s"), name: "", role: "human", time: "1 min" }],
+      __isNew: true
+    });
+  }
+
+  const filtered = useMemo(() => list.filter(w => {
     if (filterDept !== "all" && w.deptId !== filterDept) return false;
     if (filterStatus !== "all" && w.status !== filterStatus) return false;
     return true;
-  }), [filterDept, filterStatus]);
+  }), [list, filterDept, filterStatus]);
 
   const statsToday = {
-    total: Workflows.length,
-    published: Workflows.filter(w => w.status === "published").length,
+    total: list.length,
+    published: list.filter(w => w.status === "published").length,
     runs: runs.length,
     fails: runs.filter(r => r.status === "fail").length
   };
@@ -69,7 +97,7 @@ export function WorkflowsPage() {
           </div>
           <div className="row" style={{ gap: 8 }}>
             <button className="btn btn--ghost btn--sm"><Icon.RefreshCw size={13} /> 同步模板</button>
-            <button className="btn btn--primary btn--sm"><Icon.Plus size={13} /> 新建工作流</button>
+            <button className="btn btn--primary btn--sm" onClick={newTemplate}><Icon.Plus size={13} /> 新建工作流</button>
           </div>
         </div>
       </div>
@@ -121,7 +149,15 @@ export function WorkflowsPage() {
                 没有匹配的工作流 — 调整筛选条件
               </div>
             )}
-            {filtered.map(w => <WorkflowCard key={w.id} w={w} onView={setViewing} onRun={setRunning} />)}
+            {filtered.map(w => (
+              <WorkflowCard
+                key={w.id} w={w}
+                onView={setViewing}
+                onRun={setRunning}
+                onEdit={() => setEditing({ ...w, steps: w.steps.map(s => ({ ...s })) })}
+                onDelete={() => setConfirm({ w })}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -129,7 +165,31 @@ export function WorkflowsPage() {
       {tab === "runs" && <RunsTable runs={runs} />}
       {tab === "library" && <SkillDomainMap />}
 
-      {viewing && <WorkflowDetail w={viewing} onClose={() => setViewing(null)} onRun={(w) => { setViewing(null); setRunning(w); }} />}
+      {viewing && (
+        <WorkflowDetail
+          w={viewing}
+          onClose={() => setViewing(null)}
+          onRun={(w) => { setViewing(null); setRunning(w); }}
+          onEdit={(w) => { setViewing(null); setEditing({ ...w, steps: w.steps.map(s => ({ ...s })) }); }}
+        />
+      )}
+      {editing && (
+        <WorkflowEditor
+          workflow={editing}
+          onChange={setEditing}
+          onClose={() => setEditing(null)}
+          onSave={() => saveTemplate(editing)}
+        />
+      )}
+      {confirm && (
+        <ConfirmModal
+          title="删除工作流模板?"
+          body={<>将删除模板 <b>"{confirm.w.name}"</b>。其历史运行记录保留在审计日志中,但模板将无法再次启动。</>}
+          danger
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => deleteTemplate(confirm.w.id)}
+        />
+      )}
       {running && (
         <RunDialog
           kind="workflow"
@@ -142,21 +202,27 @@ export function WorkflowsPage() {
   );
 }
 
-function WorkflowCard({ w, onView, onRun }) {
+function WorkflowCard({ w, onView, onRun, onEdit, onDelete }) {
   const dept = Departments.find(d => d.id === w.deptId);
   const accent = dept ? dept.color : "#7c3aed";
   const status = WORKFLOW_STATUSES.find(s => s.v === w.status) || WORKFLOW_STATUSES[0];
   const IconComp = Icon[w.icon] || Icon.Workflow;
   return (
-    <div className="card" style={{ padding: 18, opacity: w.status === "deprecated" ? 0.6 : 1 }}>
-      <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
+    <div className="card" style={{ padding: 18, position: "relative", opacity: w.status === "deprecated" ? 0.6 : 1 }}>
+      {(onEdit || onDelete) && (
+        <div className="row-actions" style={{ position: "absolute", top: 12, right: 12 }}>
+          {onEdit && <button className="icon-btn" title="编辑" onClick={onEdit}><Icon.Edit size={13} /></button>}
+          {onDelete && <button className="icon-btn icon-btn--danger" title="删除" onClick={onDelete}><Icon.Trash size={13} /></button>}
+        </div>
+      )}
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 10, paddingRight: 56 }}>
         <div className="row" style={{ gap: 10 }}>
           <div style={{ width: 36, height: 36, borderRadius: 9, background: accent + "18", color: accent, display: "grid", placeItems: "center" }}>
             <IconComp size={17} />
           </div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)" }}>{w.name}</div>
-            <div className="num" style={{ fontSize: 10, color: "var(--fg3)" }}>{w.version} · {w.owner}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)" }}>{w.name || <span style={{ color: "var(--fg4)", fontWeight: 500 }}>未命名</span>}</div>
+            <div className="num" style={{ fontSize: 10, color: "var(--fg3)" }}>{w.version} · {w.owner || "未指派"}</div>
           </div>
         </div>
         <span className="pill" style={{ background: status.color + "20", color: status.color, fontWeight: 600 }}>{status.label}</span>
@@ -200,7 +266,7 @@ function WorkflowCard({ w, onView, onRun }) {
   );
 }
 
-function WorkflowDetail({ w, onClose, onRun }) {
+function WorkflowDetail({ w, onClose, onRun, onEdit }) {
   const dept = Departments.find(d => d.id === w.deptId);
   const accent = dept ? dept.color : "#7c3aed";
   const skills = (w.linkedSkills || []).map(id => SkillPacks.find(s => s.id === id)).filter(Boolean);
@@ -215,7 +281,7 @@ function WorkflowDetail({ w, onClose, onRun }) {
       onClose={onClose}
       foot={<>
         <button className="btn btn--ghost btn--sm" onClick={onClose}>关闭</button>
-        <button className="btn btn--ghost btn--sm"><Icon.Edit size={13} /> 编辑模板</button>
+        <button className="btn btn--ghost btn--sm" onClick={() => onEdit && onEdit(w)}><Icon.Edit size={13} /> 编辑模板</button>
         <button className="btn btn--primary btn--sm" style={{ background: accent }} onClick={() => onRun && onRun(w)}><Icon.PlayCircle size={13} /> 立即运行</button>
       </>}
     >
@@ -314,7 +380,7 @@ function RunsTable({ runs }) {
         </thead>
         <tbody>
           {runs.map(r => {
-            const wf = Workflows.find(w => w.id === r.workflowId);
+            const wf = SeedWorkflows.find(w => w.id === r.workflowId);
             const st = RUN_STATUS[r.status] || RUN_STATUS.ok;
             return (
               <tr key={r.id} style={{ borderTop: "1px solid var(--border-soft)" }}>
@@ -342,7 +408,7 @@ function SkillDomainMap() {
   // owners can see fan-out.
   const skillUsage = {};
   const domainUsage = {};
-  Workflows.forEach(w => {
+  SeedWorkflows.forEach(w => {
     (w.linkedSkills || []).forEach(sid => { (skillUsage[sid] = skillUsage[sid] || []).push(w); });
     (w.linkedDomains || []).forEach(did => { (domainUsage[did] = domainUsage[did] || []).push(w); });
   });
@@ -401,3 +467,185 @@ function SkillDomainMap() {
     </div>
   );
 }
+
+const WORKFLOW_ICONS = ["Workflow", "FileText", "GitBranch", "Eye", "Stethoscope", "AlertTriangle", "Truck", "Sparkles", "Search", "BarChart"];
+
+function WorkflowEditor({ workflow: w, onChange, onClose, onSave }) {
+  function set(k, v) { onChange({ ...w, [k]: v }); }
+  const valid = (w.name || "").trim().length > 0 && (w.steps || []).length > 0;
+
+  // Steps array helpers
+  function setStep(i, patch) {
+    const next = w.steps.slice(); next[i] = { ...next[i], ...patch }; set("steps", next);
+  }
+  function addStep() {
+    set("steps", [...(w.steps || []), { id: makeId("s"), name: "", role: "human", time: "1 min" }]);
+  }
+  function delStep(i) { set("steps", w.steps.filter((_, j) => j !== i)); }
+  function moveStep(i, delta) {
+    const next = w.steps.slice();
+    const j = i + delta;
+    if (j < 0 || j >= next.length) return;
+    [next[i], next[j]] = [next[j], next[i]];
+    set("steps", next);
+  }
+
+  // Linked skills / knowledge domains
+  function toggle(key, id) {
+    const cur = w[key] || [];
+    set(key, cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]);
+  }
+
+  return (
+    <Modal
+      title={w.__isNew ? "新建工作流模板" : `编辑模板 · ${w.name || "(未命名)"}`}
+      sub="模板由步骤序列 + 引用资产构成。每个步骤标注角色 (人工 / 系统 / 技能 / AI / 审批) 和预期耗时,运行时按顺序执行。"
+      large
+      onClose={onClose}
+      foot={<>
+        <button className="btn btn--ghost btn--sm" onClick={onClose}>取消</button>
+        <button className="btn btn--primary btn--sm" disabled={!valid} onClick={onSave} style={!valid ? { opacity: 0.5, cursor: "not-allowed" } : {}}>
+          <Icon.Save size={13} /> 保存
+        </button>
+      </>}
+    >
+      <div className="field">
+        <label className="field__label">名称 *</label>
+        <input className="input" value={w.name} onChange={e => set("name", e.target.value)} placeholder="例如:CMF 可行性检查" />
+      </div>
+      <div className="field">
+        <label className="field__label">描述</label>
+        <textarea className="textarea" value={w.description || ""} onChange={e => set("description", e.target.value)} placeholder="一句话说明这个工作流解决什么问题、给谁用。" />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div className="field">
+          <label className="field__label">归属部门</label>
+          <select className="select" value={w.deptId} onChange={e => set("deptId", e.target.value)}>
+            <option value="platform">平台基础</option>
+            {Departments.filter(d => !d.parentId).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            {Departments.filter(d => d.parentId).map(d => <option key={d.id} value={d.id}>— {d.name}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label className="field__label">维护人</label>
+          <input className="input" value={w.owner || ""} onChange={e => set("owner", e.target.value)} placeholder="单一负责人" />
+        </div>
+        <div className="field">
+          <label className="field__label">版本</label>
+          <input className="input num" value={w.version || "v0.1.0"} onChange={e => set("version", e.target.value)} />
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div className="field">
+          <label className="field__label">状态</label>
+          <select className="select" value={w.status || "draft"} onChange={e => set("status", e.target.value)}>
+            {WORKFLOW_STATUSES.map(s => <option key={s.v} value={s.v}>{s.label}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label className="field__label">图标</label>
+          <select className="select" value={w.icon || "Workflow"} onChange={e => set("icon", e.target.value)}>
+            {WORKFLOW_ICONS.map(i => <option key={i} value={i}>{i}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label className="field__label">平均耗时</label>
+          <input className="input" value={w.avgTime || ""} onChange={e => set("avgTime", e.target.value)} placeholder="约 5 分钟" />
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div className="field">
+          <label className="field__label">输入</label>
+          <input className="input" value={w.input || ""} onChange={e => set("input", e.target.value)} placeholder="例如:CMF 方案图 / 工艺规格" />
+        </div>
+        <div className="field">
+          <label className="field__label">输出</label>
+          <input className="input" value={w.output || ""} onChange={e => set("output", e.target.value)} placeholder="例如:可行性评分 / 替代方案 / 风险清单" />
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <Icon.Workflow size={14} style={{ color: "var(--vel-indigo)" }} />
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>步骤 ({(w.steps || []).length})</div>
+          </div>
+          <button className="btn btn--ghost btn--sm" onClick={addStep}><Icon.Plus size={12} /> 添加步骤</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {(w.steps || []).map((s, i) => {
+            const role = STEP_ROLES[s.role] || STEP_ROLES.human;
+            return (
+              <div key={s.id || i} style={{
+                display: "grid",
+                gridTemplateColumns: "26px 1.4fr 110px 130px 80px 60px",
+                gap: 8, alignItems: "center",
+                padding: "8px 10px",
+                background: "var(--slate-50)",
+                borderLeft: `3px solid ${role.color}`,
+                borderRadius: 8
+              }}>
+                <span className="num" style={{ fontSize: 11, color: "var(--fg3)", fontWeight: 800, textAlign: "center" }}>{String(i + 1).padStart(2, "0")}</span>
+                <input className="input" value={s.name} onChange={e => setStep(i, { name: e.target.value })} placeholder="步骤名称" />
+                <select className="select" value={s.role} onChange={e => setStep(i, { role: e.target.value })}>
+                  {Object.entries(STEP_ROLES).map(([v, m]) => <option key={v} value={v}>{m.label}</option>)}
+                </select>
+                {s.role === "skill" ? (
+                  <select className="select" value={s.skillId || ""} onChange={e => setStep(i, { skillId: e.target.value || undefined })}>
+                    <option value="">— 选择技能 —</option>
+                    {SkillPacks.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
+                  </select>
+                ) : s.role === "approval" ? (
+                  <input className="input" value={s.approver || ""} onChange={e => setStep(i, { approver: e.target.value })} placeholder="审批人" />
+                ) : (
+                  <span style={{ fontSize: 11, color: "var(--fg4)", textAlign: "center" }}>—</span>
+                )}
+                <input className="input num" value={s.time || ""} onChange={e => setStep(i, { time: e.target.value })} placeholder="30s" />
+                <div className="row" style={{ gap: 2, justifyContent: "flex-end" }}>
+                  <button className="icon-btn" disabled={i === 0} onClick={() => moveStep(i, -1)} title="上移" style={i === 0 ? { opacity: 0.3 } : {}}><Icon.ArrowRight size={11} style={{ transform: "rotate(-90deg)" }} /></button>
+                  <button className="icon-btn" disabled={i === (w.steps.length - 1)} onClick={() => moveStep(i, 1)} title="下移" style={i === (w.steps.length - 1) ? { opacity: 0.3 } : {}}><Icon.ArrowRight size={11} style={{ transform: "rotate(90deg)" }} /></button>
+                  <button className="icon-btn icon-btn--danger" onClick={() => delStep(i)} title="删除"><Icon.Trash size={11} /></button>
+                </div>
+              </div>
+            );
+          })}
+          {(w.steps || []).length === 0 && <div style={{ fontSize: 12, color: "var(--fg4)", padding: "12px 0", textAlign: "center" }}>至少需要一个步骤才能保存</div>}
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+          <Icon.Sparkles size={14} style={{ color: "var(--vel-violet)" }} />
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>引用技能 ({(w.linkedSkills || []).length})</div>
+        </div>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          {SkillPacks.map(sp => {
+            const sel = (w.linkedSkills || []).includes(sp.id);
+            return (
+              <button key={sp.id} className={`btn btn--sm ${sel ? "btn--primary" : "btn--ghost"}`} onClick={() => toggle("linkedSkills", sp.id)}>{sp.name}</button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+          <Icon.Database size={14} style={{ color: "var(--success)" }} />
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>引用知识域 ({(w.linkedDomains || []).length})</div>
+        </div>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          {KnowledgeDomains.map(d => {
+            const sel = (w.linkedDomains || []).includes(d.id);
+            return (
+              <button key={d.id} className={`btn btn--sm ${sel ? "btn--primary" : "btn--ghost"}`} onClick={() => toggle("linkedDomains", d.id)}>{d.name}</button>
+            );
+          })}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+

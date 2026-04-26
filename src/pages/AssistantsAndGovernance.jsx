@@ -9,6 +9,17 @@ const ROLE_OPTIONS = [
   { v: "staff", label: "Staff" }
 ];
 
+// CSV cell formatter — quotes any cell containing comma / quote / newline,
+// escapes embedded quotes by doubling them per RFC 4180.
+function cellToCsv(v) {
+  if (v == null) return "";
+  const s = String(v);
+  if (s.includes(",") || s.includes("\"") || s.includes("\n") || s.includes("\r")) {
+    return `"${s.replace(/"/g, "\"\"")}"`;
+  }
+  return s;
+}
+
 export function AssistantsPage({ setRoute }) {
   const [rules, setRules] = useState(() => AssistantRoutingRules.map(r => ({ ...r })));
   const [editing, setEditing] = useState(null);
@@ -377,6 +388,25 @@ function AuditLogPanel({ setRoute }) {
     danger: { cls: "pill--danger",  label: "danger" }
   };
 
+  function exportCsv() {
+    const headers = ["时间", "操作人", "IP", "类别", "级别", "操作", "对象", "范围"];
+    const rows = filtered.map(e => [e.at, e.actor, e.ip, e.category, e.severity, e.action, e.target, e.scope]);
+    const csv = [headers, ...rows]
+      .map(row => row.map(cellToCsv).join(","))
+      .join("\r\n");
+    // Prepend BOM so Excel renders the Chinese characters as UTF-8 by default.
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
+    a.href = url;
+    a.download = `velocity-audit-log-${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 250);
+  }
+
   return (
     <div className="card" style={{ marginTop: 20 }}>
       <div className="card__head">
@@ -386,7 +416,9 @@ function AuditLogPanel({ setRoute }) {
             <Icon.Search size={13} />
             <input placeholder="按操作 / 对象 / 操作人搜索…" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <button className="btn btn--ghost btn--sm"><Icon.Upload size={13} /> 导出 CSV</button>
+          <button className="btn btn--ghost btn--sm" onClick={exportCsv} disabled={filtered.length === 0} style={filtered.length === 0 ? { opacity: 0.5 } : {}}>
+            <Icon.Upload size={13} /> 导出 CSV
+          </button>
         </div>
       </div>
 

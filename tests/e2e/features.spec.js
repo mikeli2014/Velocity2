@@ -1,0 +1,78 @@
+import { test, expect } from "@playwright/test";
+
+// Feature-level specs covering interactions added after the initial smoke
+// suite. Same selectors-as-text approach to stay refactor-resistant.
+
+test.describe("Velocity OS — features", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+  });
+
+  test("Cmd-K command palette opens and routes to a picked entity", async ({ page }) => {
+    await page.keyboard.press("Control+k");
+    const input = page.getByPlaceholder(/搜索 OKR/);
+    await expect(input).toBeVisible();
+    await input.fill("CMF");
+    // Wait for at least one matching row.
+    const firstRow = page.locator("[data-cmd-row='0']");
+    await expect(firstRow).toBeVisible();
+    await firstRow.click();
+    // Palette should close after picking.
+    await expect(input).not.toBeVisible();
+  });
+
+  test("notifications dropdown opens and clears unread count", async ({ page }) => {
+    await page.getByRole("button", { name: "通知" }).click();
+    await expect(page.getByText("全部已读")).toBeVisible();
+    // At least one unread notification visible
+    await expect(page.getByText(/未读/)).toBeVisible();
+    await page.getByText("全部已读").click();
+    // Unread badge should disappear after clearing
+    await expect(page.getByText(/未读/)).not.toBeVisible();
+  });
+
+  test("project detail modal surfaces milestones and risks", async ({ page }) => {
+    await page.locator(".sidebar__nav").getByText("OKR 与关键项目").click();
+    await page.getByText("关键项目组合").click();
+    await page.getByText("全屋净水 2.0").first().click();
+    await expect(page.getByText("里程碑", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText(/参与人/)).toBeVisible();
+  });
+
+  test("decision detail modal renders assumptions and dissent", async ({ page }) => {
+    await page.locator(".sidebar__nav").getByText("OKR 与关键项目").click();
+    await page.getByText("决策日志").click();
+    await page.getByText("县域服务网络由 BP 主导改为 SC 主导").click();
+    await expect(page.getByText("关键假设", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText(/反对/).first()).toBeVisible();
+  });
+
+  test("workflow template editor opens for new template", async ({ page }) => {
+    await page.locator(".sidebar__nav").getByText("工作流中心").click();
+    await page.getByRole("button", { name: /新建工作流/ }).click();
+    await expect(page.getByText("新建工作流模板")).toBeVisible();
+    // Has at least one step row in the editor seed
+    await expect(page.getByText(/添加步骤/)).toBeVisible();
+  });
+
+  test("audit log CSV export button is enabled when entries match", async ({ page }) => {
+    await page.locator(".sidebar__nav").getByText("权限与治理").click();
+    const btn = page.getByRole("button", { name: /导出 CSV/ });
+    await expect(btn).toBeVisible();
+    await expect(btn).toBeEnabled();
+  });
+
+  test("KR check-in dialog shows history sparkline", async ({ page }) => {
+    await page.locator(".sidebar__nav").getByText("OKR 与关键项目").click();
+    // First KR row's Check-in icon is the only RefreshCw button on the page
+    await page.locator("button[title='Check-in']").first().click();
+    await expect(page.getByText(/历史 Check-in/)).toBeVisible();
+  });
+
+  test("strategy question creation flow accepts a new draft", async ({ page }) => {
+    await page.locator(".sidebar__nav").getByText("战略工作台").click();
+    await page.getByText("战略问题").first().click();
+    await page.getByRole("button", { name: /提出新问题/ }).first().click();
+    await expect(page.getByText("提出战略问题")).toBeVisible();
+  });
+});

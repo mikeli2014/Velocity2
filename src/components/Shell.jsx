@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Icon } from "./primitives.jsx";
-import { Company, Departments } from "../data/seed.js";
+import { Company, Departments, Notifications as SeedNotifications, NOTIFICATION_CATEGORIES } from "../data/seed.js";
 
 const NAV = [
   { id: "home", label: "首页", en: "Home", icon: "Home" },
@@ -96,7 +96,30 @@ export function Sidebar({ route, setRoute }) {
   );
 }
 
-export function Topbar({ route }) {
+export function Topbar({ route, setRoute }) {
+  const [notifs, setNotifs] = useState(() => SeedNotifications.map(n => ({ ...n })));
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef(null);
+  const unread = notifs.filter(n => !n.read).length;
+
+  useEffect(() => {
+    if (!notifOpen) return undefined;
+    function onDoc(e) {
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [notifOpen]);
+
+  function openNotif(n) {
+    setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x));
+    setNotifOpen(false);
+    if (n.link && setRoute) setRoute(n.link);
+  }
+  function markAllRead() {
+    setNotifs(prev => prev.map(n => ({ ...n, read: true })));
+  }
+
   const crumbs = useMemo(() => {
     const map = {
       home: ["首页"],
@@ -143,17 +166,114 @@ export function Topbar({ route }) {
         <kbd>⌘K</kbd>
       </div>
       <div className="topbar__actions">
-        <button className="topbar__icon-btn" title="新建">
+        <button className="topbar__icon-btn" title="新建" onClick={() => window.dispatchEvent(new Event("velocity:open-palette"))}>
           <Icon.Plus size={16} />
         </button>
-        <button className="topbar__icon-btn" title="助手">
+        <button className="topbar__icon-btn" title="助手" onClick={() => setRoute && setRoute({ page: "assistants" })}>
           <Icon.MessageCircle size={16} />
         </button>
-        <button className="topbar__icon-btn" title="通知">
-          <Icon.Bell size={16} />
-          <span className="dot" />
-        </button>
+        <div ref={notifRef} style={{ position: "relative" }}>
+          <button
+            className="topbar__icon-btn"
+            title="通知"
+            onClick={() => setNotifOpen(o => !o)}
+            aria-expanded={notifOpen}
+          >
+            <Icon.Bell size={16} />
+            {unread > 0 && <span className="dot" />}
+          </button>
+          {notifOpen && (
+            <NotificationDropdown
+              notifs={notifs}
+              unread={unread}
+              onPick={openNotif}
+              onMarkAllRead={markAllRead}
+              onClose={() => setNotifOpen(false)}
+            />
+          )}
+        </div>
       </div>
     </header>
+  );
+}
+
+function NotificationDropdown({ notifs, unread, onPick, onMarkAllRead, onClose }) {
+  return (
+    <div
+      role="dialog"
+      style={{
+        position: "absolute",
+        top: "calc(100% + 6px)",
+        right: 0,
+        width: 380,
+        maxHeight: "70vh",
+        background: "#fff",
+        border: "1px solid var(--border)",
+        borderRadius: 12,
+        boxShadow: "0 24px 60px rgba(15,23,42,0.18)",
+        display: "flex",
+        flexDirection: "column",
+        zIndex: 40,
+        overflow: "hidden"
+      }}
+      onClick={e => e.stopPropagation()}
+    >
+      <div className="row" style={{ justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid var(--border-soft)" }}>
+        <div className="row" style={{ gap: 8 }}>
+          <Icon.Bell size={14} style={{ color: "var(--vel-indigo)" }} />
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--fg1)" }}>通知</div>
+          {unread > 0 && <span className="pill pill--danger num">{unread} 未读</span>}
+        </div>
+        <div className="row" style={{ gap: 6 }}>
+          <button className="btn btn--text btn--sm" disabled={unread === 0} onClick={onMarkAllRead} style={unread === 0 ? { opacity: 0.4 } : {}}>全部已读</button>
+          <button className="icon-btn" onClick={onClose} title="关闭"><Icon.X size={13} /></button>
+        </div>
+      </div>
+      <div className="scroll" style={{ flex: 1, overflow: "auto" }}>
+        {notifs.length === 0 && (
+          <div style={{ padding: 28, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>暂无通知</div>
+        )}
+        {notifs.map((n, i) => {
+          const cat = NOTIFICATION_CATEGORIES[n.category] || NOTIFICATION_CATEGORIES.project;
+          const IconC = Icon[cat.icon] || Icon.Bell;
+          return (
+            <div
+              key={n.id}
+              onClick={() => onPick(n)}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "32px 1fr",
+                gap: 12,
+                padding: "12px 16px",
+                borderTop: i ? "1px solid var(--border-soft)" : "none",
+                cursor: "pointer",
+                background: n.read ? "transparent" : "rgba(99,102,241,0.04)"
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "var(--slate-50)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = n.read ? "transparent" : "rgba(99,102,241,0.04)"; }}
+            >
+              <div style={{
+                width: 30, height: 30, borderRadius: 8,
+                background: cat.color + "18", color: cat.color,
+                display: "grid", placeItems: "center"
+              }}>
+                <IconC size={14} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div className="row" style={{ justifyContent: "space-between", marginBottom: 2, gap: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: n.read ? 500 : 700, color: "var(--fg1)", flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.title}</div>
+                  {!n.read && <span style={{ width: 6, height: 6, borderRadius: 3, background: "var(--vel-indigo)", flexShrink: 0, marginTop: 6 }} />}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--fg2)", lineHeight: 1.5 }}>{n.body}</div>
+                <div className="row" style={{ gap: 8, marginTop: 6, fontSize: 11, color: "var(--fg4)" }}>
+                  <span className="pill" style={{ background: cat.color + "20", color: cat.color, fontWeight: 600 }}>{cat.label}</span>
+                  <span>{n.at}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
