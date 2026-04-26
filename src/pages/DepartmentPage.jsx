@@ -1,12 +1,19 @@
-import React, { useState } from "react";
-import { Icon, KpiCard, Progress, HealthPill, ConfirmModal, makeId } from "../components/primitives.jsx";
+import React, { useState, useEffect } from "react";
+import { Icon, KpiCard, Progress, HealthPill, ConfirmModal, Modal, makeId } from "../components/primitives.jsx";
 import { ProjectEditor } from "./OkrPage.jsx";
 import { ProjectDetail } from "../components/ProjectDetail.jsx";
-import { Departments, KnowledgeDomains, SkillPacks, Company, Projects, Objectives } from "../data/seed.js";
+import { RunDialog } from "../components/RunDialog.jsx";
+import { Departments, KnowledgeDomains, SkillPacks, Company, Projects, Objectives, Workflows } from "../data/seed.js";
 
 export function DepartmentPage({ deptId }) {
-  const dept = Departments.find(d => d.id === deptId) || Departments[0];
+  const baseDept = Departments.find(d => d.id === deptId) || Departments[0];
+  const [dept, setDept] = useState(baseDept);
   const [tab, setTab] = useState("overview");
+  const [configuring, setConfiguring] = useState(false);
+  useEffect(() => {
+    const next = Departments.find(d => d.id === deptId) || Departments[0];
+    setDept(prev => (prev.id === next.id ? prev : next));
+  }, [deptId]);
   const isID = dept.id === "industrial-design";
 
   const tabs = isID ? [
@@ -51,7 +58,7 @@ export function DepartmentPage({ deptId }) {
             </div>
           </div>
           <div className="row" style={{ gap: 8 }}>
-            <button className="btn btn--ghost btn--sm"><Icon.Settings size={13} /> 配置</button>
+            <button className="btn btn--ghost btn--sm" onClick={() => setConfiguring(true)}><Icon.Settings size={13} /> 配置</button>
             <button className="btn btn--primary btn--sm" style={{ background: dept.color }}><Icon.MessageCircle size={13} /> 打开{dept.assistant}</button>
           </div>
         </div>
@@ -69,9 +76,196 @@ export function DepartmentPage({ deptId }) {
       {tab === "cmf" && <CMFIntelligence />}
       {tab === "market" && <MarketInsights />}
       {tab === "skills" && <DeptSkills dept={dept} />}
-      {tab === "workflows" && <DeptWorkflows />}
+      {tab === "workflows" && <DeptWorkflows dept={dept} />}
       {tab === "projects" && <DeptProjects dept={dept} />}
       {tab === "assistant" && <AssistantChat dept={dept} />}
+
+      {configuring && (
+        <DepartmentConfigModal
+          dept={dept}
+          onClose={() => setConfiguring(false)}
+          onSave={(next) => { setDept(next); setConfiguring(false); }}
+        />
+      )}
+    </div>
+  );
+}
+
+const ROLE_OPTIONS = [
+  { v: "ceo",        label: "CEO / 总经理" },
+  { v: "vp",         label: "VP / 部门负责人" },
+  { v: "lead",       label: "团队负责人" },
+  { v: "staff",      label: "一线员工" },
+  { v: "consultant", label: "外部顾问" }
+];
+const CHANNEL_OPTIONS = [
+  { v: "web",   label: "Velocity Web", icon: "Globe" },
+  { v: "wecom", label: "企业微信",      icon: "MessageCircle" },
+  { v: "api",   label: "API",          icon: "Code" }
+];
+
+function DepartmentConfigModal({ dept, onClose, onSave }) {
+  const [form, setForm] = useState({
+    ...dept,
+    knowledgeDomainIds: dept.knowledgeDomainIds || KnowledgeDomains.map(d => d.id),
+    skillPackIds: dept.skillPackIds || SkillPacks.filter(s => s.dept === dept.id).map(s => s.id),
+    workflowIds: dept.workflowIds || Workflows.filter(w => w.deptId === dept.id).map(w => w.id),
+    assistantTone: dept.assistantTone || "专业 · 简洁 · 引用来源",
+    channels: dept.channels || ["web", "wecom"],
+    allowedRoles: dept.allowedRoles || ["vp", "lead", "staff"],
+    description: dept.description || `${dept.name} 工作空间 · 由 ${dept.lead || "—"} 管理`
+  });
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+  function toggle(key, id) {
+    const cur = form[key] || [];
+    set(key, cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]);
+  }
+
+  return (
+    <Modal
+      title={`配置 · ${dept.name}`}
+      sub="部门工作空间的元数据、知识域 / 技能 / 工作流绑定、助手与权限。改动只更新当前会话状态。"
+      large
+      onClose={onClose}
+      foot={<>
+        <button className="btn btn--ghost btn--sm" onClick={onClose}>取消</button>
+        <button className="btn btn--primary btn--sm" onClick={() => onSave(form)} style={{ background: dept.color }}>
+          <Icon.Save size={13} /> 保存配置
+        </button>
+      </>}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div className="field">
+          <label className="field__label">部门名称</label>
+          <input className="input" value={form.name} onChange={e => set("name", e.target.value)} />
+        </div>
+        <div className="field">
+          <label className="field__label">英文名 (Slug)</label>
+          <input className="input" value={form.en || ""} onChange={e => set("en", e.target.value)} />
+        </div>
+        <div className="field">
+          <label className="field__label">部门负责人</label>
+          <input className="input" value={form.lead || ""} onChange={e => set("lead", e.target.value)} />
+        </div>
+      </div>
+      <div className="field">
+        <label className="field__label">部门描述</label>
+        <textarea className="textarea" value={form.description} onChange={e => set("description", e.target.value)} placeholder="一句话说明部门职责与服务对象。" />
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+          <Icon.MessageCircle size={14} style={{ color: dept.color }} />
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>部门助手</div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="field">
+            <label className="field__label">助手名称</label>
+            <input className="input" value={form.assistant || ""} onChange={e => set("assistant", e.target.value)} placeholder="例如:小龙虾" />
+          </div>
+          <div className="field">
+            <label className="field__label">默认语气</label>
+            <input className="input" value={form.assistantTone} onChange={e => set("assistantTone", e.target.value)} />
+          </div>
+        </div>
+        <div className="field">
+          <label className="field__label">入口渠道</label>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            {CHANNEL_OPTIONS.map(c => {
+              const sel = form.channels.includes(c.v);
+              const IconC = Icon[c.icon] || Icon.Globe;
+              return (
+                <button key={c.v} className={`btn btn--sm ${sel ? "btn--primary" : "btn--ghost"}`} onClick={() => toggle("channels", c.v)}>
+                  <IconC size={12} /> {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <ConfigList
+        icon={<Icon.Database size={14} style={{ color: "var(--success)" }} />}
+        label={`知识域 (${form.knowledgeDomainIds.length} / ${KnowledgeDomains.length})`}
+        items={KnowledgeDomains}
+        selected={form.knowledgeDomainIds}
+        onToggle={id => toggle("knowledgeDomainIds", id)}
+        renderRow={d => (
+          <>
+            <span style={{ fontSize: 13, color: "var(--fg1)", flex: 1 }}>{d.name}</span>
+            <span className="num" style={{ fontSize: 11, color: "var(--fg3)" }}>{d.count} 条</span>
+            <span className={`pill ${d.health === "ok" ? "pill--ok" : "pill--warn"}`}>{d.coverage}%</span>
+          </>
+        )}
+      />
+
+      <ConfigList
+        icon={<Icon.Sparkles size={14} style={{ color: "var(--vel-violet)" }} />}
+        label={`Skill Pack (${form.skillPackIds.length})`}
+        items={SkillPacks}
+        selected={form.skillPackIds}
+        onToggle={id => toggle("skillPackIds", id)}
+        renderRow={s => (
+          <>
+            <span style={{ fontSize: 13, color: "var(--fg1)", flex: 1 }}>{s.name}</span>
+            <span className="pill pill--neutral">{s.scope === "platform" ? "平台" : s.scope === "company" ? "全公司" : s.scope === "cross-dept" ? "跨部门" : "部门私有"}</span>
+            <span className="num" style={{ fontSize: 11, color: "var(--fg3)" }}>{s.version}</span>
+          </>
+        )}
+      />
+
+      <ConfigList
+        icon={<Icon.Workflow size={14} style={{ color: "var(--vel-indigo)" }} />}
+        label={`工作流模板 (${form.workflowIds.length})`}
+        items={Workflows}
+        selected={form.workflowIds}
+        onToggle={id => toggle("workflowIds", id)}
+        renderRow={w => (
+          <>
+            <span style={{ fontSize: 13, color: "var(--fg1)", flex: 1 }}>{w.name}</span>
+            <span className="num" style={{ fontSize: 11, color: "var(--fg3)" }}>{w.steps.length} 步 · {w.avgTime}</span>
+          </>
+        )}
+      />
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+          <Icon.Lock size={14} style={{ color: "var(--warning)" }} />
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>访问角色 ({form.allowedRoles.length})</div>
+        </div>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          {ROLE_OPTIONS.map(r => {
+            const sel = form.allowedRoles.includes(r.v);
+            return (
+              <button key={r.v} className={`btn btn--sm ${sel ? "btn--primary" : "btn--ghost"}`} onClick={() => toggle("allowedRoles", r.v)}>{r.label}</button>
+            );
+          })}
+        </div>
+        <div style={{ fontSize: 11, color: "var(--fg4)", marginTop: 6 }}>未勾选的角色默认不能访问 {dept.name}。CEO 始终拥有读权限。</div>
+      </div>
+    </Modal>
+  );
+}
+
+function ConfigList({ icon, label, items, selected, onToggle, renderRow }) {
+  return (
+    <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+      <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+        {icon}
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflow: "auto", padding: 4 }}>
+        {items.map(it => {
+          const checked = selected.includes(it.id);
+          return (
+            <label key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderRadius: 6, background: checked ? "var(--vel-indigo-50)" : "var(--slate-50)", cursor: "pointer" }}>
+              <input type="checkbox" checked={checked} onChange={() => onToggle(it.id)} />
+              {renderRow(it)}
+            </label>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -267,6 +461,7 @@ function MarketInsights() {
 
 function DeptSkills({ dept }) {
   const list = SkillPacks.filter(s => s.dept === dept.id);
+  const [running, setRunning] = useState(null);
   return (
     <div>
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
@@ -293,7 +488,7 @@ function DeptSkills({ dept }) {
             </div>
             <div className="row" style={{ justifyContent: "space-between", paddingTop: 10, borderTop: "1px solid var(--border-soft)" }}>
               <div style={{ fontSize: 11, color: "var(--fg3)" }}>{s.uses} 次 · ★ {s.rating}</div>
-              <button className="btn btn--text btn--sm">运行 →</button>
+              <button className="btn btn--text btn--sm" onClick={() => setRunning(s)}>运行 →</button>
             </div>
           </div>
         ))}
@@ -303,11 +498,42 @@ function DeptSkills({ dept }) {
           </div>
         )}
       </div>
+      {running && <RunDialog kind="skill" item={running} onClose={() => setRunning(null)} />}
     </div>
   );
 }
 
-function DeptWorkflows() {
+function DeptWorkflows({ dept }) {
+  const [running, setRunning] = useState(null);
+  // Prefer real Workflows from registry that match this dept; fall back to
+  // the original mocked list for departments whose workflows aren't seeded.
+  const real = Workflows.filter(w => w.deptId === dept.id);
+  if (real.length > 0) {
+    return (
+      <div className="grid grid-cols-2">
+        {real.map(w => (
+          <div key={w.id} className="card" style={{ padding: 18 }}>
+            <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+              {React.createElement(Icon[w.icon] || Icon.Workflow, { size: 16, style: { color: "var(--vel-indigo)" } })}
+              <span className="pill pill--neutral">{w.steps.length} 步</span>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)", marginBottom: 6 }}>{w.name}</div>
+            <div style={{ fontSize: 12, color: "var(--fg3)", lineHeight: 1.5, marginBottom: 12 }}>{w.description}</div>
+            <div className="row" style={{ gap: 4, marginBottom: 12 }}>
+              {w.steps.map((s, si) => (
+                <div key={s.id || si} style={{ flex: 1, height: 4, borderRadius: 2, background: "var(--vel-indigo)" }} />
+              ))}
+            </div>
+            <div className="row" style={{ justifyContent: "space-between", fontSize: 11, color: "var(--fg3)" }}>
+              <span>{w.uses} 次执行 · {w.avgTime}</span>
+              <button className="btn btn--text btn--sm" onClick={() => setRunning(w)}>启动 →</button>
+            </div>
+          </div>
+        ))}
+        {running && <RunDialog kind="workflow" item={running} onClose={() => setRunning(null)} />}
+      </div>
+    );
+  }
   const flows = [
     { name: "创建设计简报", steps: 5, uses: 64, time: "约 8 分钟" },
     { name: "材料方案对比", steps: 4, uses: 38, time: "约 5 分钟" },

@@ -2,6 +2,18 @@ import React from "react";
 import { Icon, KpiCard, Progress, HealthPill } from "../components/primitives.jsx";
 import { Company, Objectives, Projects, Activity, Departments, StrategyQuestion, Agents } from "../data/seed.js";
 
+function activityRoute(a) {
+  switch (a.type) {
+    case "project":   return { page: "okr" };
+    case "risk":      return { page: "okr" };
+    case "strategy":  return { page: "strategy" };
+    case "assistant": return { page: "assistants" };
+    case "knowledge": return { page: "knowledge" };
+    case "view":      return { page: "okr" };
+    default:          return null;
+  }
+}
+
 export function HomePage({ setRoute }) {
   return (
     <div className="content fade-in">
@@ -171,25 +183,35 @@ export function HomePage({ setRoute }) {
               <span className="pill pill--ghost">实时</span>
             </div>
             <div style={{ padding: "6px 0" }}>
-              {Activity.map((a, i) => (
-                <div key={a.id} style={{
-                  display: "flex", gap: 10,
-                  padding: "10px 18px",
-                  borderTop: i ? "1px solid var(--border-soft)" : "none"
-                }}>
-                  <div style={{
-                    width: 6, height: 6, borderRadius: "50%",
-                    background: a.type === "risk" ? "var(--danger)" : a.type === "strategy" ? "var(--vel-indigo)" : a.type === "knowledge" ? "var(--success)" : "var(--fg4)",
-                    marginTop: 6, flexShrink: 0
-                  }} />
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 12.5, lineHeight: 1.45, color: "var(--fg2)" }}>
-                      <strong style={{ color: "var(--fg1)", fontWeight: 600 }}>{a.who}</strong> {a.what} <span style={{ color: "var(--fg1)", fontWeight: 500 }}>{a.target}</span>
+              {Activity.map((a, i) => {
+                const route = activityRoute(a);
+                return (
+                  <div key={a.id} onClick={() => route && setRoute(route)}
+                    style={{
+                      display: "flex", gap: 10,
+                      padding: "10px 18px",
+                      borderTop: i ? "1px solid var(--border-soft)" : "none",
+                      cursor: route ? "pointer" : "default",
+                      transition: "background 0.12s"
+                    }}
+                    onMouseEnter={e => { if (route) e.currentTarget.style.background = "var(--slate-50)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <div style={{
+                      width: 6, height: 6, borderRadius: "50%",
+                      background: a.type === "risk" ? "var(--danger)" : a.type === "strategy" ? "var(--vel-indigo)" : a.type === "knowledge" ? "var(--success)" : "var(--fg4)",
+                      marginTop: 6, flexShrink: 0
+                    }} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 12.5, lineHeight: 1.45, color: "var(--fg2)" }}>
+                        <strong style={{ color: "var(--fg1)", fontWeight: 600 }}>{a.who}</strong> {a.what} <span style={{ color: "var(--fg1)", fontWeight: 500 }}>{a.target}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--fg4)", marginTop: 2 }}>{a.when}</div>
                     </div>
-                    <div style={{ fontSize: 11, color: "var(--fg4)", marginTop: 2 }}>{a.when}</div>
+                    {route && <Icon.Chevron size={12} style={{ color: "var(--fg4)", marginTop: 6 }} />}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { Icon, KpiCard, Modal, ConfirmModal, makeId } from "../components/primitives.jsx";
+import { RunDialog } from "../components/RunDialog.jsx";
 import { SkillPacks, SKILL_SCOPES, SKILL_STATUSES, Departments } from "../data/seed.js";
 
 const SKILL_ICONS = ["Search", "Eye", "BarChart", "Sparkles", "GitBranch", "FileText", "Stethoscope", "AlertTriangle", "Workflow", "Cloud", "Lock", "Activity", "Database"];
 
-function SkillCard({ s, dept, onEdit, onDelete }) {
+function SkillCard({ s, dept, onEdit, onDelete, onRun }) {
   const scope = SKILL_SCOPES.find(x => x.v === s.scope) || SKILL_SCOPES[0];
   const status = SKILL_STATUSES.find(x => x.v === s.status) || SKILL_STATUSES[0];
   const accent = dept ? dept.color : "#7c3aed";
@@ -43,7 +44,7 @@ function SkillCard({ s, dept, onEdit, onDelete }) {
           <span><Icon.Activity size={11} style={{ verticalAlign: "-2px" }} /> <span className="num">{s.uses}</span> 次</span>
           <span><Icon.Star size={11} style={{ verticalAlign: "-2px", color: "#f59e0b" }} /> <span className="num">{s.rating}</span></span>
         </div>
-        <button className="btn btn--text btn--sm" disabled={s.status === "deprecated"}>运行 <Icon.ArrowRight size={11} /></button>
+        <button className="btn btn--text btn--sm" disabled={s.status === "deprecated"} onClick={() => onRun && onRun(s)}>运行 <Icon.ArrowRight size={11} /></button>
       </div>
     </div>
   );
@@ -132,6 +133,7 @@ export function SkillsPage() {
   const [list, setList] = useState(() => SkillPacks.map(s => ({ ...s })));
   const [editing, setEditing] = useState(null);
   const [confirm, setConfirm] = useState(null);
+  const [running, setRunning] = useState(null);
   const [filterDept, setFilterDept] = useState("all");
   const [filterScope, setFilterScope] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -240,6 +242,7 @@ export function SkillsPage() {
               key={s.id} s={s} dept={dept}
               onEdit={() => setEditing({ ...s })}
               onDelete={() => setConfirm({ s })}
+              onRun={() => setRunning(s)}
             />
           );
         })}
@@ -265,6 +268,7 @@ export function SkillsPage() {
           onConfirm={del}
         />
       )}
+      {running && <RunDialog kind="skill" item={running} onClose={() => setRunning(null)} />}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Icon, KpiCard, Modal } from "../components/primitives.jsx";
+import { RunDialog } from "../components/RunDialog.jsx";
 import {
   Workflows, WorkflowRuns, WORKFLOW_STATUSES,
   Departments, SkillPacks, KnowledgeDomains
@@ -25,6 +26,7 @@ export function WorkflowsPage() {
   const [filterDept, setFilterDept] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [viewing, setViewing] = useState(null);
+  const [running, setRunning] = useState(null);
 
   const filtered = useMemo(() => Workflows.filter(w => {
     if (filterDept !== "all" && w.deptId !== filterDept) return false;
@@ -105,7 +107,7 @@ export function WorkflowsPage() {
                 没有匹配的工作流 — 调整筛选条件
               </div>
             )}
-            {filtered.map(w => <WorkflowCard key={w.id} w={w} onView={setViewing} />)}
+            {filtered.map(w => <WorkflowCard key={w.id} w={w} onView={setViewing} onRun={setRunning} />)}
           </div>
         </div>
       )}
@@ -113,12 +115,13 @@ export function WorkflowsPage() {
       {tab === "runs" && <RunsTable runs={WorkflowRuns} />}
       {tab === "library" && <SkillDomainMap />}
 
-      {viewing && <WorkflowDetail w={viewing} onClose={() => setViewing(null)} />}
+      {viewing && <WorkflowDetail w={viewing} onClose={() => setViewing(null)} onRun={(w) => { setViewing(null); setRunning(w); }} />}
+      {running && <RunDialog kind="workflow" item={running} onClose={() => setRunning(null)} />}
     </div>
   );
 }
 
-function WorkflowCard({ w, onView }) {
+function WorkflowCard({ w, onView, onRun }) {
   const dept = Departments.find(d => d.id === w.deptId);
   const accent = dept ? dept.color : "#7c3aed";
   const status = WORKFLOW_STATUSES.find(s => s.v === w.status) || WORKFLOW_STATUSES[0];
@@ -167,7 +170,7 @@ function WorkflowCard({ w, onView }) {
         </div>
         <div className="row" style={{ gap: 6 }}>
           <button className="btn btn--text btn--sm" onClick={() => onView(w)}>查看 <Icon.ArrowRight size={11} /></button>
-          <button className="btn btn--primary btn--sm" disabled={w.status === "deprecated"} style={w.status === "deprecated" ? { opacity: 0.5 } : { background: accent }}>
+          <button className="btn btn--primary btn--sm" disabled={w.status === "deprecated"} onClick={() => onRun && onRun(w)} style={w.status === "deprecated" ? { opacity: 0.5 } : { background: accent }}>
             <Icon.PlayCircle size={13} /> 运行
           </button>
         </div>
@@ -176,7 +179,7 @@ function WorkflowCard({ w, onView }) {
   );
 }
 
-function WorkflowDetail({ w, onClose }) {
+function WorkflowDetail({ w, onClose, onRun }) {
   const dept = Departments.find(d => d.id === w.deptId);
   const accent = dept ? dept.color : "#7c3aed";
   const skills = (w.linkedSkills || []).map(id => SkillPacks.find(s => s.id === id)).filter(Boolean);
@@ -192,7 +195,7 @@ function WorkflowDetail({ w, onClose }) {
       foot={<>
         <button className="btn btn--ghost btn--sm" onClick={onClose}>关闭</button>
         <button className="btn btn--ghost btn--sm"><Icon.Edit size={13} /> 编辑模板</button>
-        <button className="btn btn--primary btn--sm" style={{ background: accent }}><Icon.PlayCircle size={13} /> 立即运行</button>
+        <button className="btn btn--primary btn--sm" style={{ background: accent }} onClick={() => onRun && onRun(w)}><Icon.PlayCircle size={13} /> 立即运行</button>
       </>}
     >
       <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
