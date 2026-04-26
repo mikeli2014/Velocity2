@@ -229,6 +229,7 @@ export function WorkflowsPage() {
         <RunDialog
           kind="workflow"
           item={running}
+          deptId={running.deptId}
           onClose={() => setRunning(null)}
           onComplete={persistRun}
         />

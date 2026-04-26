@@ -46,7 +46,11 @@ apps/api/
 │       ├── objectives.py  Full CRUD: GET/POST/PATCH/DELETE on objectives
 │       ├── catalog.py     Read-only: company / departments / projects /
 │       │                  decisions / knowledge-sources
-│       └── knowledge.py   Knowledge Center: domains + overview aggregate
+│       ├── knowledge.py   Knowledge Center: domains + overview aggregate
+│       ├── automation.py  Skill packs / workflows / runs
+│       ├── inbox.py       Notifications / routing / audit
+│       └── chat.py        Anthropic chat (prompt caching) — backs the
+│                          AssistantChat panel + Skill RunDialog
 ├── tests/                 pytest happy-path coverage
 ├── requirements.txt       runtime deps
 ├── requirements-dev.txt   pytest / httpx / ruff
@@ -190,8 +194,13 @@ Decision 8 overturned: unified single-service deploy".
   `APIRouter` covers what we need.
 - **Don't introduce a service layer** — Phase 1 routes can call ORM
   directly. When a route grows past ~80 lines, factor a `services/` helper.
-- **Don't add Anthropic SDK calls in Phase 1.** The dep is wired so the
-  Phase 2 step is a small diff, not a stack expansion.
+- **Don't put volatile per-request strings inside the cached system
+  blocks** in `routes/chat.py`. Cache is prefix-matched — any byte
+  change invalidates the whole prefix. Use `system_suffix` (uncached)
+  for per-request guidance; reserve the cached blocks for Company /
+  Department / Skill facts that change once a day at most.
+- **Don't import `claude-sonnet-4-6` with a date suffix.** Model ids
+  are exact strings — see `routes/chat.py` for the canonical constants.
 - **Don't bulk-fix the frontend** to call the API — that's Phase 2 step 1
   and is its own coordinated effort.
 - **Don't introduce English-only seed entries** — keep the Beihai voice.
@@ -201,7 +210,7 @@ Decision 8 overturned: unified single-service deploy".
 | | Phase 1 ✅ shipped | Phase 2 (queued) |
 |---|---|---|
 | **CRUD** | Objectives + KRs full CRUD; KnowledgeDomain PATCH; everything else read-only | Project / Decision / KnowledgeSource writes |
-| **AI** | Anthropic SDK as a dep, no calls | Chat endpoint with prompt caching; multi-agent debate orchestration |
+| **AI** | `/api/v1/chat` with prompt caching (Sonnet 4.6 default; Haiku 4.5 reserved for routing); soft-falls to demo output when key missing | Multi-agent debate orchestration; Haiku routing classifier wired |
 | **RAG** | None | pgvector + document parser + embedding service |
 | **Auth** | None (public Cloud Run) | `X-User-Id` header → real OAuth / JWT |
 | **Frontend wiring** | None — frontend still reads `seed.js` | `useApi(...)` hook; per-page cutover |

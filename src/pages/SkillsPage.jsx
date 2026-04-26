@@ -278,7 +278,7 @@ export function SkillsPage() {
           onConfirm={del}
         />
       )}
-      {running && <RunDialog kind="skill" item={running} onClose={() => setRunning(null)} />}
+      {running && <RunDialog kind="skill" item={running} deptId={running.dept} onClose={() => setRunning(null)} />}
     </div>
   );
 }

@@ -378,6 +378,56 @@ class AuditEventOut(_CamelModel):
     link: dict[str, Any] | None = None
 
 
+# --- Chat (Anthropic) ---------------------------------------------------
+
+
+class ChatMessageIn(_CamelModel):
+    """A single turn submitted by the frontend. ``role`` is "user" or
+    "assistant"; ``content`` is plain text (no tool use yet)."""
+
+    role: str
+    content: str
+
+
+class ChatRequestIn(_CamelModel):
+    """Frontend → backend chat payload.
+
+    The ``messages`` array is the volatile turn-by-turn history. Stable
+    company / department context is assembled server-side so the cached
+    prefix stays byte-stable across requests (prompt caching invariant).
+    """
+
+    messages: list[ChatMessageIn] = Field(default_factory=list)
+    # Optional department scope — pulls dept name + assistant persona into
+    # the system prompt as a second cached block.
+    dept_id: str | None = None
+    # Optional skill scope — when set, the assistant is framed as the
+    # skill's runner and the user's first turn is the skill input.
+    skill_id: str | None = None
+    # Optional caller-supplied system prompt suffix. Appended AFTER the
+    # cached blocks so volatile per-request guidance doesn't break the
+    # prefix match. Use sparingly.
+    system_suffix: str | None = None
+    # Override for chat model. Defaults to ``claude-sonnet-4-6``.
+    model: str | None = None
+    # Hard token cap for the response. Defaults to 1024 (chat-sized).
+    max_tokens: int | None = None
+
+
+class ChatUsageOut(_CamelModel):
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_input_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+
+
+class ChatResponseOut(_CamelModel):
+    text: str
+    model: str
+    stop_reason: str | None = None
+    usage: ChatUsageOut
+
+
 # --- Health ------------------------------------------------------------
 
 

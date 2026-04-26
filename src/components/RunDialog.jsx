@@ -1,23 +1,83 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Icon, Modal } from "./primitives.jsx";
+import { apiPost, ApiError } from "../lib/api.js";
 
 // Shared run dialog used for Workflow templates and Skill packs.
 // Renders the chosen item's step list (or default 3-step shape for skills),
 // animates step state ⇒ pending → running → done, then displays a synthesized
 // output panel with an "Add to project / save as knowledge / copy" action row.
-export function RunDialog({ kind, item, onClose, defaultInput = "", outputBuilder, onComplete }) {
+//
+// Output sourcing
+// ---------------
+// 1. If a caller passes ``outputBuilder``, that wins (legacy + workflow path).
+// 2. Otherwise, for ``kind === "skill"``, we POST to /api/v1/chat with the
+//    skill id + user input and use the model's reply as the output body.
+// 3. If the API is unreachable / unconfigured, we fall back to ``defaultOutput``.
+export function RunDialog({ kind, item, deptId, onClose, defaultInput = "", outputBuilder, onComplete }) {
   const [input, setInput] = useState(defaultInput);
   const [stage, setStage] = useState(-1); // -1 = not started, 0..N = in step i, N+1 = done
   const [running, setRunning] = useState(false);
   const [output, setOutput] = useState(null);
   const startedAt = useRef(null);
   const timer = useRef(null);
+  const cancelled = useRef(false);
 
   const steps = (item.steps && item.steps.length)
     ? item.steps
     : defaultSkillSteps(item);
 
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(() => () => {
+    cancelled.current = true;
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  function finishWithOutput(out) {
+    if (cancelled.current) return;
+    setOutput(out);
+    setStage(steps.length);
+    setRunning(false);
+    if (onComplete) {
+      const elapsedSec = Math.max(1, Math.round((Date.now() - startedAt.current) / 1000));
+      const mm = Math.floor(elapsedSec / 60);
+      const ss = elapsedSec % 60;
+      onComplete({
+        kind, item, input,
+        output: out,
+        duration: mm > 0 ? `${mm}m ${String(ss).padStart(2, "0")}s` : `${ss}s`,
+        startedAt: new Date().toLocaleTimeString("zh-CN", { hour12: false })
+      });
+    }
+  }
+
+  async function callSkillChat() {
+    try {
+      const res = await apiPost("/api/v1/chat", {
+        messages: [{ role: "user", content: input }],
+        deptId,
+        skillId: item.id,
+        // Skill outputs deserve more headroom than a chat reply.
+        maxTokens: 2048
+      });
+      const meta = res?.usage
+        ? `调用 ${res.model || "Claude"} · 输入 ${res.usage.inputTokens || 0} tok · 输出 ${res.usage.outputTokens || 0} tok` +
+          (res.usage.cacheReadInputTokens ? ` · 缓存命中 ${res.usage.cacheReadInputTokens} tok` : "")
+        : `调用 ${res?.model || "Claude"}`;
+      return {
+        title: `${item.name} · 完成`,
+        meta,
+        body: res?.text || "(空响应)",
+        sources: ["公司知识中心 · Anthropic 调用"]
+      };
+    } catch (err) {
+      const detail = err instanceof ApiError ? err.detail : String(err);
+      // Soft-fall back to the canned demo output.
+      const fallback = defaultOutput({ item, input });
+      fallback.meta = detail === "anthropic_not_configured"
+        ? "未配置 ANTHROPIC_API_KEY · 演示模拟"
+        : `API 不可用(${detail || "网络错误"}) · 演示模拟`;
+      return fallback;
+    }
+  }
 
   function start() {
     if (!input.trim()) return;
@@ -25,6 +85,16 @@ export function RunDialog({ kind, item, onClose, defaultInput = "", outputBuilde
     setStage(0);
     setOutput(null);
     startedAt.current = Date.now();
+    cancelled.current = false;
+
+    // Kick off the real call in parallel with the visual step animation.
+    // The step animation always paces the UI (gives the modal a sense of
+    // structure); whichever finishes last commits the output.
+    const useChat = kind === "skill" && !outputBuilder;
+    const outputPromise = useChat
+      ? callSkillChat()
+      : Promise.resolve(outputBuilder ? outputBuilder({ item, input }) : defaultOutput({ item, input }));
+
     let i = 0;
     const tick = () => {
       i += 1;
@@ -32,21 +102,9 @@ export function RunDialog({ kind, item, onClose, defaultInput = "", outputBuilde
         setStage(i);
         timer.current = setTimeout(tick, 700);
       } else {
-        setStage(steps.length);
-        const out = outputBuilder ? outputBuilder({ item, input }) : defaultOutput({ item, input });
-        setOutput(out);
-        setRunning(false);
-        if (onComplete) {
-          const elapsedSec = Math.max(1, Math.round((Date.now() - startedAt.current) / 1000));
-          const mm = Math.floor(elapsedSec / 60);
-          const ss = elapsedSec % 60;
-          onComplete({
-            kind, item, input,
-            output: out,
-            duration: mm > 0 ? `${mm}m ${String(ss).padStart(2, "0")}s` : `${ss}s`,
-            startedAt: new Date().toLocaleTimeString("zh-CN", { hour12: false })
-          });
-        }
+        // Last step: wait for the output promise, then commit.
+        setStage(i);
+        outputPromise.then(finishWithOutput);
       }
     };
     timer.current = setTimeout(tick, 700);

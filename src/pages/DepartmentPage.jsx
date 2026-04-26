@@ -4,7 +4,7 @@ import { ProjectEditor } from "./OkrPage.jsx";
 import { ProjectDetail } from "../components/ProjectDetail.jsx";
 import { RunDialog } from "../components/RunDialog.jsx";
 import { Departments as SeedDepartments, KnowledgeDomains, SkillPacks, KnowledgeSources, Company, Projects, Objectives, Workflows, DeptActivity } from "../data/seed.js";
-import { useApi } from "../lib/api.js";
+import { useApi, apiPost, ApiError } from "../lib/api.js";
 
 export function DepartmentPage({ deptId }) {
   // Department record is derived from `deptId`; user edits in the
@@ -503,7 +503,7 @@ function DeptSkills({ dept }) {
           </div>
         )}
       </div>
-      {running && <RunDialog kind="skill" item={running} onClose={() => setRunning(null)} />}
+      {running && <RunDialog kind="skill" item={running} deptId={dept.id} onClose={() => setRunning(null)} />}
     </div>
   );
 }
@@ -535,7 +535,7 @@ function DeptWorkflows({ dept }) {
             </div>
           </div>
         ))}
-        {running && <RunDialog kind="workflow" item={running} onClose={() => setRunning(null)} />}
+        {running && <RunDialog kind="workflow" item={running} deptId={dept.id} onClose={() => setRunning(null)} />}
       </div>
     );
   }
@@ -693,23 +693,59 @@ function AssistantChat({ dept }) {
   ];
   const [msgs, setMsgs] = useState(initial);
   const [draft, setDraft] = useState("");
-  const send = () => {
-    if (!draft.trim()) return;
-    setMsgs([...msgs, { role: "user", text: draft }]);
+  const [pending, setPending] = useState(false);
+
+  // Calls /api/v1/chat with the running transcript. Falls back to a
+  // canned local reply if the backend is unreachable so the demo still
+  // feels alive in fully-offline mode (e.g. someone running the SPA
+  // without the FastAPI service).
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || pending) return;
+    const nextMsgs = [...msgs, { role: "user", text }];
+    setMsgs(nextMsgs);
     setDraft("");
-    setTimeout(() => {
+    setPending(true);
+    try {
+      const wire = nextMsgs.map(m => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.text
+      }));
+      const res = await apiPost("/api/v1/chat", {
+        messages: wire,
+        deptId: dept.id
+      });
       setMsgs(m => [
         ...m,
         {
           role: "assistant",
-          text: "已基于公司 OKR 和部门知识为你生成回答(模拟数据)。这里会包含来源引用、推荐的下一步动作,以及可写回到项目/OKR 的入口。",
-          sourceIds: ["ks-4"],
+          text: res?.text || "(空响应)",
           sources: [],
-          skill: "奥维数据分析",
-          okr: ["O1"]
+          skill: dept.assistant ? `${dept.assistant} · Sonnet 4.6` : "Sonnet 4.6",
+          model: res?.model,
+          usage: res?.usage
         }
       ]);
-    }, 600);
+    } catch (err) {
+      const offline = err instanceof ApiError;
+      const detail = offline ? err.detail : String(err);
+      // Soft-fail: surface a clearly-labelled fallback so the
+      // assistant chat doesn't go silent when ANTHROPIC_API_KEY isn't
+      // configured on a preview deploy.
+      setMsgs(m => [
+        ...m,
+        {
+          role: "assistant",
+          text: detail === "anthropic_not_configured"
+            ? "助手未配置:后台缺少 ANTHROPIC_API_KEY,本回合返回模拟内容。\n\n实际部署中,这里会引用部门知识库并写回项目/OKR。"
+            : `助手暂时不可用(${detail || "网络错误"}),稍后重试。`,
+          sources: [],
+          skill: dept.assistant
+        }
+      ]);
+    } finally {
+      setPending(false);
+    }
   };
 
   function openSource(id) {
@@ -784,9 +820,23 @@ function AssistantChat({ dept }) {
           <div className="row" style={{ gap: 8, padding: "8px 12px", background: "var(--slate-50)", border: "1px solid var(--border)", borderRadius: 10 }}>
             <button className="btn btn--icon btn--text"><Icon.Paperclip size={15} /></button>
             <button className="btn btn--icon btn--text"><Icon.Image size={15} /></button>
-            <input value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder={`@${dept.assistant} 帮我…`} style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 13, color: "var(--fg1)" }} />
+            <input
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && !pending && send()}
+              placeholder={pending ? "助手思考中…" : `@${dept.assistant} 帮我…`}
+              disabled={pending}
+              style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 13, color: "var(--fg1)" }}
+            />
             <button className="btn btn--icon btn--text"><Icon.Mic size={15} /></button>
-            <button className="btn btn--primary btn--sm" onClick={send}><Icon.Send size={13} /> 发送</button>
+            <button
+              className="btn btn--primary btn--sm"
+              onClick={send}
+              disabled={pending || !draft.trim()}
+              style={(pending || !draft.trim()) ? { opacity: 0.5, cursor: "not-allowed" } : {}}
+            >
+              <Icon.Send size={13} /> {pending ? "发送中…" : "发送"}
+            </button>
           </div>
         </div>
       </div>
