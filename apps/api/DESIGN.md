@@ -206,6 +206,48 @@ hostname. When the API URL is known, add it to the frontend's
   per-question. The skill-pack `claude-api` skill should be invoked
   when this lands.
 
+## Follow-up decisions
+
+### 2026-04-26 — Decision 8 overturned: unified single-service deploy
+
+Original decision 8 above said "separate Cloud Run service for the API".
+Reversed today: a **single Cloud Run service** serves both the React SPA
+(built `dist/`) and the API.
+
+**Implementation:**
+- `Dockerfile` (root) is now a 2-stage build: stage 1 = `node:20-alpine`
+  runs `npm ci && npm run build`; stage 2 = `python:3.11-slim` installs
+  `apps/api/requirements.txt` and copies the frontend's `dist/` into
+  `/app/static/`.
+- `velocity_api/app.py` mounts `static/` as a `StaticFiles` route AFTER
+  the API routers. A custom catch-all returns `index.html` for unknown
+  paths (the SPA fallback nginx used to provide).
+- FastAPI gets `GZipMiddleware` + a cache-control middleware that adds
+  `Cache-Control: public, immutable, max-age=31536000` for `/assets/*`
+  and `no-cache, no-store, must-revalidate` for `index.html` — same
+  guarantees the previous `nginx.conf` made.
+- `nginx.conf` is removed; the Playwright smoke specs that asserted
+  `Cache-Control: immutable` and the `/healthz` endpoint continue to
+  pass because both behaviors moved into FastAPI.
+- `cloudbuild.yaml` continues to deploy a single service (the same
+  `velocity2`) — the Dockerfile change is the only deploy delta.
+
+**Why the reversal:**
+- One URL, no CORS dance, no second trigger to maintain.
+- Frontend's bundle size is small (~100 KB gzipped) so baking it into
+  the API image adds negligible cold-start cost.
+- Demo workload — independent scaling between FE and API isn't a real
+  requirement yet.
+
+**Trade-offs accepted:**
+- The Python image is bigger than nginx-static (~80 MB vs ~25 MB
+  compressed). Acceptable.
+- Python serves static assets less efficiently than nginx. With
+  GZipMiddleware + cache headers it's fine for the demo's traffic.
+- If the API later needs different scaling than the frontend, we can
+  split back into two services without rewriting either side — only the
+  Dockerfile + cloudbuild.yaml move.
+
 ---
 
 If a decision here turns out wrong, add a follow-up entry below

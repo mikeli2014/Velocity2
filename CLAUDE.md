@@ -12,9 +12,17 @@ enterprise (the seed data is for a fictional Chinese smart-appliance company,
 **北海智能家居 / Beihai Smart Home**), so all UI strings, examples, and seed
 data are in Simplified Chinese.
 
-The app is a *prototype / demo*: there is no backend, no real auth, no
-network I/O. Every piece of state lives in `useState` and resets on reload.
-Modal-based CRUD writes to in-memory copies of seed data.
+The frontend is still self-contained — every page hydrates from
+`src/data/seed.js` and resets on reload. A **Phase 1 FastAPI backend**
+lives in `apps/api/` with the same data shape mirrored as Python literals
+in `seed_data.py`; the frontend doesn't call it yet, that's Phase 2 step 1.
+See `apps/api/CLAUDE.md` for the backend's own conventions and
+`apps/api/DESIGN.md` for the architecture rationale (Python over Node,
+unified Cloud Run service over split, etc).
+
+The app is still a *prototype / demo* end-to-end. Modal-based CRUD writes
+to in-memory copies of seed data on the frontend. The backend persists
+to SQLite (dev) / Postgres (prod) but the frontend isn't wired to it yet.
 
 The product vision and PRD live in `docs/`:
 - `docs/01_VISION_AND_CAPABILITIES.md` — English vision
@@ -200,9 +208,13 @@ When you add a feature that has user-visible behavior:
 
 ## Deploy pipeline
 
-`Dockerfile` is a 2-stage build (Node → Nginx). `nginx.conf` listens on
-`8080` (Cloud Run convention), serves `/assets/*` with 1y immutable
-cache, no-cache on `index.html`, SPA fallback, plus `/healthz`.
+`Dockerfile` is a 2-stage build: stage 1 = `node:20-alpine` runs
+`npm run build`; stage 2 = `python:3.11-slim` installs the FastAPI
+backend AND copies the frontend's `dist/` into `static/`. The unified
+container listens on `8080` (Cloud Run convention) and serves both
+`/api/v1/*` and the SPA. Cache headers + gzip live in
+`apps/api/velocity_api/app.py` middleware (`/assets/*` → 1y immutable;
+`index.html` → no-cache). The `/healthz` endpoint also lives there.
 
 `cloudbuild.yaml` does build → push → Cloud Run deploy → Playwright e2e
 against `_BASE_URL`. The trigger needs to be configured in **"Cloud
@@ -210,7 +222,8 @@ Build configuration file"** mode pointing at `/cloudbuild.yaml` (not the
 auto-Dockerfile mode).
 
 `.dockerignore` keeps `tests/`, `playwright-report`, `cloudbuild.yaml`,
-`docs/`, `Requirement/`, `.claude/` etc. out of the image.
+`docs/`, `Requirement/`, `.claude/`, and `apps/api/{tests,DESIGN.md,
+CLAUDE.md,.data,.venv}` out of the image.
 
 ## When you're adding a feature
 

@@ -46,6 +46,11 @@ class CompanyOut(_CamelModel):
     revenue: str | None = None
     fiscal_year: str | None = None
     brand_color: str | None = None
+    # Knowledge profile (Phase 1: empty defaults; PRD §5.1 / §6.1).
+    focus_areas: list[str] = Field(default_factory=list)
+    competitors: list[dict[str, Any]] = Field(default_factory=list)
+    terminology: list[dict[str, Any]] = Field(default_factory=list)
+    context_prompt: str | None = None
 
 
 class DepartmentOut(_CamelModel):
@@ -210,7 +215,7 @@ class KnowledgeOverviewOut(_CamelModel):
 # --- Health ------------------------------------------------------------
 
 
-class HealthOut(BaseModel):
+class HealthOut(_CamelModel):
     status: str = "ok"
     version: str
     database: str  # "sqlite" | "postgres" | other

@@ -152,25 +152,35 @@ When you add an endpoint, add at least one happy-path test in
 
 ## Deployment
 
-The backend deploys as a **separate Cloud Run service** (`velocity2-api`)
-alongside the frontend. The repo's existing `cloudbuild.yaml` only deploys
-the frontend; a parallel `cloudbuild.api.yaml` (Phase 2) will deploy this
-one. The trigger setup is the same shape:
+**Unified single Cloud Run service** (`velocity2`). The repo's root
+`Dockerfile` is a 2-stage build:
 
-```yaml
-- name: gcr.io/cloud-builders/docker
-  args: [build, -t, gcr.io/$PROJECT_ID/velocity2-api:$COMMIT_SHA, -f, apps/api/Dockerfile, .]
-- name: gcr.io/cloud-builders/docker
-  args: [push, --all-tags, gcr.io/$PROJECT_ID/velocity2-api]
-- name: gcr.io/google.com/cloudsdktool/cloud-sdk
-  entrypoint: gcloud
-  args: [run, deploy, velocity2-api, --image=...:$COMMIT_SHA,
-         --region=us-east1, --allow-unauthenticated, --port=8080]
+1. `node:20-alpine` runs `npm ci && npm run build` to produce `dist/`.
+2. `python:3.11-slim` installs `apps/api/requirements.txt`, copies the
+   `velocity_api` package, and copies the SPA's `dist/` into `./static/`.
+
+`velocity_api/app.py` mounts that `static/` directory after the API
+routers. A custom catch-all returns `index.html` for unknown paths so
+the frontend's state-based routing handles deep links the way nginx
+used to. `GZipMiddleware` + a cache-control middleware reproduce the
+old nginx.conf headers (immutable for `/assets/*`, no-cache for
+`index.html`).
+
+`cloudbuild.yaml` deploys the unified image with no per-service
+parallelism — same flow as before:
+
+```
+build → push → gcloud run deploy velocity2 → playwright e2e against $_BASE_URL
 ```
 
 The container listens on `$PORT` (Cloud Run convention), defaulting to
-8080. CORS allowlist in `settings.py` already includes the frontend's
-Cloud Run URL.
+8080. CORS allowlist in `settings.py` covers the dev server (5173/5174)
+and the deployed frontend URL. In the unified deploy CORS isn't strictly
+needed (same origin) but staying permissive avoids surprise breakage if
+we ever split back into two services.
+
+Decision history for this approach: see `DESIGN.md` § "2026-04-26 —
+Decision 8 overturned: unified single-service deploy".
 
 ## Things to NOT do
 
@@ -188,14 +198,15 @@ Cloud Run URL.
 
 ## Phase status (last updated alongside this commit)
 
-| | Phase 1 (this commit) | Phase 2 (queued) |
+| | Phase 1 ✅ shipped | Phase 2 (queued) |
 |---|---|---|
-| **CRUD** | Objectives + KRs full CRUD; everything else read-only | Project / Decision / KnowledgeSource writes |
+| **CRUD** | Objectives + KRs full CRUD; KnowledgeDomain PATCH; everything else read-only | Project / Decision / KnowledgeSource writes |
 | **AI** | Anthropic SDK as a dep, no calls | Chat endpoint with prompt caching; multi-agent debate orchestration |
 | **RAG** | None | pgvector + document parser + embedding service |
-| **Auth** | `X-User-Id` header with default fallback | Real OAuth / JWT |
+| **Auth** | None (public Cloud Run) | `X-User-Id` header → real OAuth / JWT |
 | **Frontend wiring** | None — frontend still reads `seed.js` | `useApi(...)` hook; per-page cutover |
-| **Deploy** | Dockerfile only | Separate Cloud Run service via `cloudbuild.api.yaml` |
-| **Tests** | pytest happy-path | + integration tests against a live preview deploy |
+| **Deploy** | Unified Cloud Run service (root `Dockerfile` ships both FE bundle and API) | Optional split when scaling needs diverge |
+| **Tests** | pytest happy-path: 18 specs covering health / objectives / catalog / knowledge | + integration tests against a live preview deploy |
 
-See `DESIGN.md` for the rationale behind these scoping calls.
+See `DESIGN.md` for the rationale behind these scoping calls and the
+follow-up entry overturning the original "separate service" deploy plan.

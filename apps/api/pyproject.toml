@@ -1,0 +1,28 @@
+[project]
+name = "velocity-api"
+version = "0.1.0"
+description = "Velocity OS — Enterprise Knowledge & Strategy backend"
+requires-python = ">=3.11"
+readme = "CLAUDE.md"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["velocity_api*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv", ".data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]

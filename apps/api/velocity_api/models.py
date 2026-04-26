@@ -47,6 +47,14 @@ class Company(Base):
     fiscal_year: Mapped[str | None] = mapped_column(String, nullable=True)
     brand_color: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Knowledge profile (PRD §5.1 / §6.1). These are static company facts
+    # injected into AI prompts as the default system context. Empty in
+    # Phase 1 — populated when the frontend gains a 公司档案 editor.
+    focus_areas: Mapped[list[str]] = mapped_column(JSON, default=list)
+    competitors: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    terminology: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    context_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+
 
 class Department(Base):
     __tablename__ = "departments"
