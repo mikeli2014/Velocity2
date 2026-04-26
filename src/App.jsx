@@ -1,15 +1,33 @@
-import React, { useState } from "react";
+import React, { useState, lazy, Suspense } from "react";
 import { Sidebar, Topbar } from "./components/Shell.jsx";
+import { Icon } from "./components/primitives.jsx";
 import { HomePage } from "./pages/HomePage.jsx";
 import { KnowledgePage } from "./pages/KnowledgePage.jsx";
 import { OkrPage } from "./pages/OkrPage.jsx";
-import { StrategyPage } from "./pages/StrategyPage.jsx";
 import { DepartmentsIndex } from "./pages/DepartmentsIndex.jsx";
 import { DepartmentPage } from "./pages/DepartmentPage.jsx";
 import { SkillsPage } from "./pages/SkillsPage.jsx";
-import { WorkflowsPage } from "./pages/WorkflowsPage.jsx";
 import { AssistantsPage, GovernancePage } from "./pages/AssistantsAndGovernance.jsx";
-import { AdminPage } from "./pages/AdminPage.jsx";
+
+// Heavier or less-frequented pages are loaded on demand to keep the
+// initial bundle below ~400 KB. Each lazy import maps the named export
+// onto the default shape that React.lazy expects.
+const StrategyPage  = lazy(() => import("./pages/StrategyPage.jsx").then(m => ({ default: m.StrategyPage })));
+const WorkflowsPage = lazy(() => import("./pages/WorkflowsPage.jsx").then(m => ({ default: m.WorkflowsPage })));
+const AdminPage     = lazy(() => import("./pages/AdminPage.jsx").then(m => ({ default: m.AdminPage })));
+
+function PageFallback() {
+  return (
+    <div className="content fade-in" style={{ paddingTop: 80 }}>
+      <div className="card" style={{ padding: 36, textAlign: "center", maxWidth: 460, margin: "0 auto" }}>
+        <Icon.RefreshCw size={28} style={{ color: "var(--vel-indigo)", margin: "0 auto 10px", animation: "spin 1.2s linear infinite" }} />
+        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)", marginBottom: 4 }}>正在加载页面…</div>
+        <div style={{ fontSize: 12, color: "var(--fg3)" }}>首次加载较大模块,稍后再次访问会从缓存读取。</div>
+      </div>
+      <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
 
 export default function App() {
   const [route, setRoute] = useState({ page: "home" });
@@ -25,8 +43,8 @@ export default function App() {
       case "skills": return <SkillsPage />;
       case "workflows": return <WorkflowsPage />;
       case "assistants": return <AssistantsPage setRoute={setRoute} />;
-      case "governance": return <GovernancePage />;
-      case "admin": return <AdminPage />;
+      case "governance": return <GovernancePage setRoute={setRoute} />;
+      case "admin": return <AdminPage setRoute={setRoute} />;
       default: return <HomePage setRoute={setRoute} />;
     }
   };
@@ -36,7 +54,9 @@ export default function App() {
       <Sidebar route={route} setRoute={setRoute} />
       <div className="main">
         <Topbar route={route} setRoute={setRoute} />
-        <Page />
+        <Suspense fallback={<PageFallback />}>
+          <Page />
+        </Suspense>
       </div>
     </div>
   );

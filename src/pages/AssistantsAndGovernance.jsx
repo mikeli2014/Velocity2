@@ -273,7 +273,7 @@ function RoutingRuleEditor({ rule: r, onChange, onClose, onSave }) {
   );
 }
 
-export function GovernancePage() {
+export function GovernancePage({ setRoute }) {
   return (
     <div className="content fade-in">
       <div className="page-head">
@@ -349,12 +349,12 @@ export function GovernancePage() {
         </div>
       </div>
 
-      <AuditLogPanel />
+      <AuditLogPanel setRoute={setRoute} />
     </div>
   );
 }
 
-function AuditLogPanel() {
+function AuditLogPanel({ setRoute }) {
   const [filterCat, setFilterCat] = useState("all");
   const [filterSev, setFilterSev] = useState("all");
   const [search, setSearch] = useState("");
@@ -422,8 +422,19 @@ function AuditLogPanel() {
           {filtered.map(e => {
             const cat = AUDIT_CATEGORIES.find(c => c.v === e.category) || AUDIT_CATEGORIES[0];
             const sev = sevMeta[e.severity] || sevMeta.info;
+            const clickable = !!e.link && !!setRoute;
             return (
-              <tr key={e.id} style={{ borderTop: "1px solid var(--border-soft)" }}>
+              <tr
+                key={e.id}
+                style={{
+                  borderTop: "1px solid var(--border-soft)",
+                  cursor: clickable ? "pointer" : "default"
+                }}
+                onClick={clickable ? () => setRoute(e.link) : undefined}
+                onMouseEnter={clickable ? (ev) => { ev.currentTarget.style.background = "var(--slate-50)"; } : undefined}
+                onMouseLeave={clickable ? (ev) => { ev.currentTarget.style.background = "transparent"; } : undefined}
+                title={clickable ? "点击跳转到相关页面" : undefined}
+              >
                 <td style={{ padding: "10px 14px", color: "var(--fg3)", fontFamily: "var(--font-mono)", fontSize: 12 }}>{e.at}</td>
                 <td style={{ padding: "10px 14px", color: "var(--fg1)", fontWeight: 600 }}>{e.actor}</td>
                 <td style={{ padding: "10px 14px", color: "var(--fg3)", fontFamily: "var(--font-mono)", fontSize: 12 }}>{e.ip}</td>
@@ -431,7 +442,10 @@ function AuditLogPanel() {
                   <span className="pill" style={{ background: cat.color + "20", color: cat.color, fontWeight: 600 }}>{cat.label}</span>
                 </td>
                 <td style={{ padding: "10px 14px" }}><span className={`pill ${sev.cls}`}>{sev.label}</span></td>
-                <td style={{ padding: "10px 14px", color: "var(--fg1)" }}>{e.action}</td>
+                <td style={{ padding: "10px 14px", color: "var(--fg1)" }}>
+                  {e.action}
+                  {clickable && <Icon.Chevron size={11} style={{ color: "var(--fg4)", marginLeft: 6, verticalAlign: "-1px" }} />}
+                </td>
                 <td style={{ padding: "10px 14px", color: "var(--fg2)", fontSize: 12 }}>
                   <div>{e.target}</div>
                   <div style={{ fontSize: 11, color: "var(--fg4)" }}>{e.scope}</div>

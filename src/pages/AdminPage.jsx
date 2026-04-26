@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { Icon, KpiCard, Avatar, Progress } from "../components/primitives.jsx";
 import { OrgTree, LLMs, PolicyRouting, DeptUsage, TopUsers } from "../data/seed.js";
 
-export function AdminPage() {
+export function AdminPage({ setRoute }) {
   const [tab, setTab] = useState("usage");
   return (
     <div className="content fade-in">
@@ -42,7 +42,7 @@ export function AdminPage() {
       {tab === "models" && <ModelsPanel />}
       {tab === "org" && <OrgPanel />}
       {tab === "quota" && <QuotaPanel />}
-      {tab === "audit" && <AuditPanel />}
+      {tab === "audit" && <AuditPanel setRoute={setRoute} />}
     </div>
   );
 }
@@ -644,18 +644,19 @@ function QuotaPanel() {
   );
 }
 
-function AuditPanel() {
+function AuditPanel({ setRoute }) {
+  // Each event carries a `link` hint so clicks route to the relevant page.
   const events = [
-    { time: "14:32:08", who: "Tomas 朱 · IT", action: "更新模型路由", target: "战略工作台 → Opus 4.1", level: "info" },
-    { time: "14:18:42", who: "陈志远 · CEO", action: "查询", target: "战略画布 / DTC 渠道讨论 (Opus)", level: "info" },
-    { time: "13:55:21", who: "苏婉 · 工业设计部", action: "上传知识", target: "CMF 春夏 2026.pdf (38 条)", level: "info" },
-    { time: "13:42:18", who: "服务部 助手", action: "拒绝请求", target: "客户身份信息 — 触发 PII 策略", level: "warn" },
-    { time: "13:18:04", who: "刘瑶 · CFO", action: "财务月度复盘", target: "私有 LLaMA-70B (本地)", level: "info" },
-    { time: "12:42:52", who: "韩松 · COO", action: "运行技能", target: "动销预测 / Q2", level: "info" },
-    { time: "12:18:24", who: "外部顾问 王平", action: "尝试访问", target: "公司 OKR — 权限拒绝", level: "danger" },
-    { time: "11:54:08", who: "Anna 林 · CGO", action: "发起战略问题", target: "DTC 渠道 FY26 投入", level: "info" },
-    { time: "11:22:46", who: "周岚 · 渠道运营", action: "补充知识", target: "BP/SC 协同 200 城试点纪要", level: "info" },
-    { time: "10:48:12", who: "—", action: "自动配额降级", target: "服务部 · 已降级到 Haiku", level: "warn" }
+    { time: "14:32:08", who: "Tomas 朱 · IT", action: "更新模型路由", target: "战略工作台 → Opus 4.1",                 level: "info",   link: { page: "admin" } },
+    { time: "14:18:42", who: "陈志远 · CEO",  action: "查询",         target: "战略画布 / DTC 渠道讨论 (Opus)",          level: "info",   link: { page: "strategy" } },
+    { time: "13:55:21", who: "苏婉 · 工业设计部", action: "上传知识", target: "CMF 春夏 2026.pdf (38 条)",                level: "info",   link: { page: "knowledge" } },
+    { time: "13:42:18", who: "服务部 助手",   action: "拒绝请求",      target: "客户身份信息 — 触发 PII 策略",            level: "warn",   link: { page: "assistants" } },
+    { time: "13:18:04", who: "刘瑶 · CFO",    action: "财务月度复盘",   target: "私有 LLaMA-70B (本地)",                    level: "info",   link: null },
+    { time: "12:42:52", who: "韩松 · COO",    action: "运行技能",      target: "动销预测 / Q2",                              level: "info",   link: { page: "skills" } },
+    { time: "12:18:24", who: "外部顾问 王平", action: "尝试访问",      target: "公司 OKR — 权限拒绝",                        level: "danger", link: { page: "governance" } },
+    { time: "11:54:08", who: "Anna 林 · CGO", action: "发起战略问题",   target: "DTC 渠道 FY26 投入",                         level: "info",   link: { page: "strategy" } },
+    { time: "11:22:46", who: "周岚 · 渠道运营", action: "补充知识",     target: "BP/SC 协同 200 城试点纪要",                  level: "info",   link: { page: "knowledge" } },
+    { time: "10:48:12", who: "—",            action: "自动配额降级",   target: "服务部 · 已降级到 Haiku",                    level: "warn",   link: { page: "department", deptId: "service" } }
   ];
   return (
     <div>
@@ -680,19 +681,32 @@ function AuditPanel() {
             </tr>
           </thead>
           <tbody>
-            {events.map((e, i) => (
-              <tr key={i} style={{ borderTop: "1px solid var(--border-soft)" }}>
-                <td style={{ padding: "10px 14px", fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--fg3)" }}>{e.time}</td>
-                <td style={{ padding: "10px 14px", fontWeight: 600, color: "var(--fg1)" }}>{e.who}</td>
-                <td style={{ padding: "10px 14px", color: "var(--fg2)" }}>{e.action}</td>
-                <td style={{ padding: "10px 14px", color: "var(--fg2)" }}>{e.target}</td>
-                <td style={{ padding: "10px 14px" }}>
-                  {e.level === "info" && <span className="pill pill--info">INFO</span>}
-                  {e.level === "warn" && <span className="pill pill--warn">WARN</span>}
-                  {e.level === "danger" && <span className="pill pill--danger">DENY</span>}
-                </td>
-              </tr>
-            ))}
+            {events.map((e, i) => {
+              const clickable = !!e.link && !!setRoute;
+              return (
+                <tr
+                  key={i}
+                  style={{ borderTop: "1px solid var(--border-soft)", cursor: clickable ? "pointer" : "default" }}
+                  onClick={clickable ? () => setRoute(e.link) : undefined}
+                  onMouseEnter={clickable ? (ev) => { ev.currentTarget.style.background = "var(--slate-50)"; } : undefined}
+                  onMouseLeave={clickable ? (ev) => { ev.currentTarget.style.background = "transparent"; } : undefined}
+                  title={clickable ? "点击跳转到相关页面" : undefined}
+                >
+                  <td style={{ padding: "10px 14px", fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--fg3)" }}>{e.time}</td>
+                  <td style={{ padding: "10px 14px", fontWeight: 600, color: "var(--fg1)" }}>{e.who}</td>
+                  <td style={{ padding: "10px 14px", color: "var(--fg2)" }}>
+                    {e.action}
+                    {clickable && <Icon.Chevron size={11} style={{ color: "var(--fg4)", marginLeft: 6, verticalAlign: "-1px" }} />}
+                  </td>
+                  <td style={{ padding: "10px 14px", color: "var(--fg2)" }}>{e.target}</td>
+                  <td style={{ padding: "10px 14px" }}>
+                    {e.level === "info" && <span className="pill pill--info">INFO</span>}
+                    {e.level === "warn" && <span className="pill pill--warn">WARN</span>}
+                    {e.level === "danger" && <span className="pill pill--danger">DENY</span>}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

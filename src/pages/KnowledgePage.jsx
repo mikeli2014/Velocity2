@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Icon, KpiCard, Progress, HealthPill, Modal } from "../components/primitives.jsx";
-import { Company, KnowledgeSources, KnowledgeDomains, Projects, DecisionsRich } from "../data/seed.js";
+import { Company, KnowledgeSources, KnowledgeDomains, Projects, DecisionsRich, IngestQueueItems, INGEST_STATES } from "../data/seed.js";
 
 export function KnowledgePage() {
   const [tab, setTab] = useState("sources");
@@ -426,28 +426,89 @@ function KnowledgeGraph() {
 }
 
 function IngestQueue() {
-  const items = [
-    { name: "Q1 财务月度复盘.pptx", state: "parsing", progress: 62 },
-    { name: "竞品 G3 发布会要点.docx", state: "embedding", progress: 88 },
-    { name: "城运 BP/SC 培训纪要.txt", state: "tagging", progress: 41 },
-    { name: "市场调研问卷 Apr.xlsx", state: "queued", progress: 0 },
-    { name: "https://aowei.com/report/2026q1", state: "fetching", progress: 18 },
-    { name: "供应商资质年检 2026.zip", state: "review", progress: 100 }
-  ];
-  const stateMap = { parsing: "解析中", embedding: "向量化", tagging: "打标签", queued: "排队中", fetching: "抓取中", review: "待审核" };
+  const [items, setItems] = useState(() => IngestQueueItems.map(it => ({ ...it })));
+  const [filter, setFilter] = useState("all");
+
+  function update(id, patch) { setItems(list => list.map(it => it.id === id ? { ...it, ...patch } : it)); }
+
+  function approve(id) { update(id, { state: "approved", progress: 100 }); }
+  function reject(id)  { update(id, { state: "rejected" }); }
+  function retry(id)   { update(id, { state: "fetching", progress: 5, error: null }); }
+
+  const counts = INGEST_STATES.reduce((acc, s) => {
+    acc[s.v] = items.filter(it => it.state === s.v).length;
+    return acc;
+  }, {});
+  const filtered = filter === "all" ? items : items.filter(it => it.state === filter);
+
+  const reviewBg = (st) => st === "approved" ? "#DCFCE7" : st === "rejected" ? "#FEE2E2" : st === "failed" ? "#FEE2E2" : "transparent";
+
   return (
-    <div className="card">
-      {items.map((it, i) => (
-        <div key={i} style={{ padding: "14px 18px", borderTop: i ? "1px solid var(--border-soft)" : "none", display: "grid", gridTemplateColumns: "1fr auto 200px auto", gap: 14, alignItems: "center" }}>
-          <div className="row" style={{ gap: 10 }}>
-            <Icon.File size={15} style={{ color: "var(--fg3)" }} />
-            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--fg1)" }}>{it.name}</div>
-          </div>
-          <span className={`pill ${it.state === 'review' ? 'pill--warn' : 'pill--info'}`}>{stateMap[it.state]}</span>
-          <Progress value={it.progress} status={it.state === 'review' ? 'warn' : 'info'} />
-          <span className="num" style={{ fontSize: 12, color: "var(--fg2)", width: 36, textAlign: "right" }}>{it.progress}%</span>
-        </div>
-      ))}
+    <div>
+      <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+        <button className={`btn btn--sm ${filter === "all" ? "btn--primary" : "btn--ghost"}`} onClick={() => setFilter("all")}>全部 ({items.length})</button>
+        {INGEST_STATES.map(s => (
+          counts[s.v] > 0 ? (
+            <button
+              key={s.v}
+              className={`btn btn--sm ${filter === s.v ? "btn--primary" : "btn--ghost"}`}
+              style={filter === s.v ? { background: s.color, borderColor: s.color } : undefined}
+              onClick={() => setFilter(s.v)}
+            >{s.label} ({counts[s.v]})</button>
+          ) : null
+        ))}
+      </div>
+
+      <div className="card">
+        {filtered.length === 0 && (
+          <div style={{ padding: 36, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>当前筛选下没有条目</div>
+        )}
+        {filtered.map((it, i) => {
+          const stateMeta = INGEST_STATES.find(s => s.v === it.state) || INGEST_STATES[0];
+          const isReview = it.state === "review";
+          const isFailed = it.state === "failed";
+          const isTerminal = it.state === "approved" || it.state === "rejected";
+          return (
+            <div key={it.id} style={{
+              padding: "14px 18px",
+              borderTop: i ? "1px solid var(--border-soft)" : "none",
+              background: reviewBg(it.state)
+            }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 130px 200px 60px auto", gap: 14, alignItems: "center" }}>
+                <div className="row" style={{ gap: 10, minWidth: 0 }}>
+                  <Icon.File size={15} style={{ color: "var(--fg3)" }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: "var(--fg1)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.name}</div>
+                    <div style={{ fontSize: 11, color: "var(--fg3)", marginTop: 2 }}>
+                      {it.scope} · {it.owner} · {it.uploaded}{it.size !== "—" ? ` · ${it.size}` : ""}
+                    </div>
+                  </div>
+                </div>
+                <span className="pill" style={{ background: stateMeta.color + "20", color: stateMeta.color, fontWeight: 600 }}>{stateMeta.label}</span>
+                <Progress value={it.progress} status={isReview ? "warn" : isFailed ? "danger" : it.state === "approved" ? "ok" : "info"} />
+                <span className="num" style={{ fontSize: 12, color: "var(--fg2)", textAlign: "right" }}>{it.progress}%</span>
+                <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
+                  {isReview && (
+                    <>
+                      <button className="btn btn--ghost btn--sm" onClick={() => reject(it.id)}><Icon.X size={12} /> 拒绝</button>
+                      <button className="btn btn--primary btn--sm" onClick={() => approve(it.id)}><Icon.Check size={12} /> 入库</button>
+                    </>
+                  )}
+                  {isFailed && (
+                    <button className="btn btn--ghost btn--sm" onClick={() => retry(it.id)}><Icon.RefreshCw size={12} /> 重试</button>
+                  )}
+                  {isTerminal && <span style={{ fontSize: 11, color: "var(--fg4)" }}>{it.state === "approved" ? "已入库" : "已拒绝"}</span>}
+                </div>
+              </div>
+              {it.error && (
+                <div style={{ marginTop: 8, padding: "8px 10px", background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: 6, fontSize: 12, color: "#B91C1C" }}>
+                  <Icon.AlertTriangle size={11} style={{ verticalAlign: "-2px" }} /> {it.error}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

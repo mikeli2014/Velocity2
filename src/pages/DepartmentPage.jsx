@@ -3,7 +3,7 @@ import { Icon, KpiCard, Progress, HealthPill, ConfirmModal, Modal, makeId } from
 import { ProjectEditor } from "./OkrPage.jsx";
 import { ProjectDetail } from "../components/ProjectDetail.jsx";
 import { RunDialog } from "../components/RunDialog.jsx";
-import { Departments, KnowledgeDomains, SkillPacks, Company, Projects, Objectives, Workflows } from "../data/seed.js";
+import { Departments, KnowledgeDomains, SkillPacks, Company, Projects, Objectives, Workflows, DeptActivity } from "../data/seed.js";
 
 export function DepartmentPage({ deptId }) {
   const baseDept = Departments.find(d => d.id === deptId) || Departments[0];
@@ -271,6 +271,7 @@ function ConfigList({ icon, label, items, selected, onToggle, renderRow }) {
 }
 
 function DeptOverview({ dept }) {
+  const feed = DeptActivity[dept.id] || DeptActivity[dept.parentId] || { questions: [], inbox: [] };
   return (
     <div>
       <div className="grid grid-cols-4" style={{ marginBottom: 20 }}>
@@ -282,14 +283,13 @@ function DeptOverview({ dept }) {
 
       <div className="grid" style={{ gridTemplateColumns: "minmax(0,2fr) minmax(0,1fr)", gap: 20 }}>
         <div className="card">
-          <div className="card__head"><div className="card__title"><Icon.Activity size={14} /> 高频问题 (本周)</div></div>
+          <div className="card__head">
+            <div className="card__title"><Icon.Activity size={14} /> 高频问题 (本周)</div>
+            <span className="pill pill--neutral">{feed.questions.length} 条</span>
+          </div>
           <div>
-            {[
-              { q: "PVD 工艺与喷涂在零冷水热水器外壳上的成本对比?", uses: 24, source: "CMF + 工艺知识库" },
-              { q: "G3 新风机在欧标认证上还差哪些?", uses: 18, source: "竞品 + 海外法规" },
-              { q: "全屋净水二代 2026 春夏色彩主推?", uses: 15, source: "趋势 + CMF" },
-              { q: "县域市场厨电单价带在 1500-2500 的 SKU 缺口?", uses: 11, source: "奥维 + 9 大品类" }
-            ].map((q, i) => (
+            {feed.questions.length === 0 && <div style={{ padding: 24, textAlign: "center", color: "var(--fg4)", fontSize: 12 }}>{dept.name} 本周尚无高频问题</div>}
+            {feed.questions.map((q, i) => (
               <div key={i} style={{ padding: "12px 18px", borderTop: i ? "1px solid var(--border-soft)" : "none" }}>
                 <div className="row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg1)" }}>"{q.q}"</div>
@@ -301,14 +301,13 @@ function DeptOverview({ dept }) {
           </div>
         </div>
         <div className="card">
-          <div className="card__head"><div className="card__title"><Icon.Inbox size={14} /> 待处理事项</div></div>
+          <div className="card__head">
+            <div className="card__title"><Icon.Inbox size={14} /> 待处理事项</div>
+            <span className="pill pill--neutral">{feed.inbox.length} 项</span>
+          </div>
           <div>
-            {[
-              { type: "review", text: "苏婉 上传了 38 条 CMF 条目待审核", color: "var(--warning)" },
-              { type: "alert", text: "竞品分析知识域覆盖度低于 70%", color: "var(--warning)" },
-              { type: "task", text: "CMF Phase 2 项目里程碑下周到期", color: "var(--vel-indigo)" },
-              { type: "fb", text: "孙阳 反馈 PVD 工艺成本数据需更新", color: "var(--danger)" }
-            ].map((t, i) => (
+            {feed.inbox.length === 0 && <div style={{ padding: 24, textAlign: "center", color: "var(--fg4)", fontSize: 12 }}>无待处理事项</div>}
+            {feed.inbox.map((t, i) => (
               <div key={i} style={{ padding: "12px 18px", borderTop: i ? "1px solid var(--border-soft)" : "none", display: "flex", gap: 10 }}>
                 <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.color, marginTop: 7, flexShrink: 0 }} />
                 <div style={{ fontSize: 13, color: "var(--fg2)", lineHeight: 1.5 }}>{t.text}</div>

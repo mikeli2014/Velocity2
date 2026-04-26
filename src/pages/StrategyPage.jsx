@@ -280,12 +280,98 @@ function StrategyPlaceholder({ variant }) {
   );
 }
 
+function CanvasToolbarButton({ title, icon, active, onClick }) {
+  const IconC = Icon[icon] || Icon.Plus;
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      style={{
+        width: 36, height: 36, borderRadius: 8,
+        color: active ? "#fff" : "rgba(255,255,255,0.7)",
+        background: active ? "rgba(99,102,241,0.4)" : "transparent",
+        display: "grid", placeItems: "center"
+      }}
+    >
+      <IconC size={16} />
+    </button>
+  );
+}
+
+function CanvasPicker({ title, empty, items, onPick, onClose }) {
+  return (
+    <div
+      style={{
+        position: "absolute", left: "50%", bottom: 78, transform: "translateX(-50%)",
+        width: 360, maxHeight: 320,
+        background: "rgba(15,23,42,0.98)", border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 12, backdropFilter: "blur(20px)",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+        color: "#fff",
+        zIndex: 11,
+        display: "flex", flexDirection: "column"
+      }}
+    >
+      <div className="row" style={{ justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>{title}</div>
+        <button onClick={onClose} style={{ color: "rgba(255,255,255,0.5)", display: "grid", placeItems: "center" }}><Icon.X size={13} /></button>
+      </div>
+      <div style={{ flex: 1, overflow: "auto", padding: 6 }}>
+        {items.length === 0 && <div style={{ padding: 18, textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{empty}</div>}
+        {items.map(it => {
+          const IconC = Icon[it.icon] || Icon.User;
+          return (
+            <button
+              key={it.id}
+              onClick={() => onPick(it.id)}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                width: "100%", padding: "8px 10px", borderRadius: 7,
+                color: "#fff", textAlign: "left",
+                background: "transparent",
+                cursor: "pointer"
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+            >
+              <div style={{ width: 28, height: 28, borderRadius: 7, background: it.color || "#4F46E5", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                <IconC size={13} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>{it.sub}</div>
+              </div>
+              <Icon.Plus size={13} style={{ color: "rgba(255,255,255,0.5)" }} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function StrategyCanvas() {
   const cx = 50, cy = 50;
-  const positions = Agents.map((a, i) => {
-    const angle = (i / Agents.length) * Math.PI * 2 - Math.PI / 2;
-    return { ...a, x: 50 + Math.cos(angle) * 32, y: 50 + Math.sin(angle) * 30 };
-  });
+  const [agentIds, setAgentIds] = useState(() => Agents.map(a => a.id));
+  const [contextIds, setContextIds] = useState(() => StrategyQuestion.context.slice(0, 3));
+  const [picker, setPicker] = useState(null); // "agent" | "context" | null
+
+  function placeOnRing(items, ringIndex, radiusY) {
+    const n = items.length || 1;
+    return items.map((item, i) => {
+      const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+      const r = ringIndex === 0 ? 32 : 44;
+      return { ...item, x: 50 + Math.cos(angle) * r, y: 50 + Math.sin(angle) * radiusY };
+    });
+  }
+
+  const agentNodes = placeOnRing(agentIds.map(id => Agents.find(a => a.id === id)).filter(Boolean), 0, 30);
+  const contextNodes = placeOnRing(contextIds.map(id => KnowledgeSources.find(s => s.id === id)).filter(Boolean).map(s => ({ ...s, isContext: true })), 1, 42);
+  const allNodes = [...agentNodes, ...contextNodes];
+
+  const availableAgents = Agents.filter(a => !agentIds.includes(a.id));
+  const availableSources = KnowledgeSources.filter(s => !contextIds.includes(s.id));
+
   return (
     <div className="canvas-stage scroll" style={{ height: "100%" }}>
       <div style={{ position: "absolute", inset: 0 }}>
@@ -296,7 +382,7 @@ function StrategyCanvas() {
               <stop offset="100%" stopColor="rgba(168,85,247,0.2)" />
             </linearGradient>
           </defs>
-          {positions.map((p, i) => (
+          {allNodes.map((p, i) => (
             <line key={i}
               x1={`${cx}%`} y1={`${cy}%`}
               x2={`${p.x}%`} y2={`${p.y}%`}
@@ -316,7 +402,7 @@ function StrategyCanvas() {
           <div style={{ fontSize: 10, color: "#c4b5fd", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700, marginBottom: 8 }}>战略问题 · Mission</div>
           <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.35, marginBottom: 12 }}>{StrategyQuestion.title}</div>
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", lineHeight: 1.5 }}>
-            上下文已注入: {StrategyQuestion.context.length} 条公司知识 · {StrategyQuestion.okrs.length} 个 OKR · {StrategyQuestion.agents.length} 个 Agent
+            上下文已注入: {contextIds.length} 条公司知识 · {StrategyQuestion.okrs.length} 个 OKR · {agentIds.length} 个 Agent
           </div>
           <div className="row" style={{ marginTop: 14, gap: 8 }}>
             <span className="pill" style={{ background: "rgba(255,255,255,0.12)", color: "#fff" }}>第 3 轮</span>
@@ -324,7 +410,7 @@ function StrategyCanvas() {
           </div>
         </div>
 
-        {positions.map(p => {
+        {agentNodes.map(p => {
           const lastMsg = DebateMessages.filter(m => m.agent === p.id).slice(-1)[0];
           return (
             <div key={p.id} style={{
@@ -353,6 +439,13 @@ function StrategyCanvas() {
                     {lastMsg.stance === "pro" ? "赞成" : lastMsg.stance === "con" ? "反对" : "保留"}
                   </span>
                 )}
+                <button
+                  onClick={() => setAgentIds(ids => ids.filter(x => x !== p.id))}
+                  title="从画布移除"
+                  style={{ width: 18, height: 18, borderRadius: 4, color: "rgba(255,255,255,0.4)", display: "grid", placeItems: "center" }}
+                >
+                  <Icon.X size={11} />
+                </button>
               </div>
               {lastMsg && (
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,0.75)", lineHeight: 1.5, maxHeight: 50, overflow: "hidden" }}>
@@ -363,19 +456,65 @@ function StrategyCanvas() {
           );
         })}
 
+        {contextNodes.map(p => (
+          <div key={p.id} style={{
+            position: "absolute", left: `${p.x}%`, top: `${p.y}%`, transform: "translate(-50%, -50%)",
+            width: 200,
+            background: "rgba(99, 102, 241, 0.18)",
+            border: "1px dashed rgba(99,102,241,0.45)",
+            backdropFilter: "blur(10px)",
+            borderRadius: 10, padding: 10,
+            color: "#c7d2fe"
+          }}>
+            <div className="row" style={{ gap: 6, marginBottom: 4 }}>
+              <Icon.FileText size={11} />
+              <span style={{ fontSize: 10, color: "rgba(199,210,254,0.7)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>{p.type}</span>
+              <button
+                onClick={() => setContextIds(ids => ids.filter(x => x !== p.id))}
+                title="从画布移除"
+                style={{ marginLeft: "auto", width: 16, height: 16, borderRadius: 3, color: "rgba(199,210,254,0.5)", display: "grid", placeItems: "center" }}
+              >
+                <Icon.X size={10} />
+              </button>
+            </div>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: "#fff", lineHeight: 1.4 }}>{p.title.slice(0, 36)}{p.title.length > 36 ? "…" : ""}</div>
+            <div style={{ fontSize: 10, color: "rgba(199,210,254,0.6)", marginTop: 3 }}>{p.scope} · {p.uses} 引用</div>
+          </div>
+        ))}
+
+        {picker === "agent" && (
+          <CanvasPicker
+            title="添加 Agent"
+            empty="所有专业 Agent 已在画布上"
+            items={availableAgents.map(a => ({ id: a.id, label: a.name, sub: a.role, color: a.color, icon: a.icon }))}
+            onPick={id => { setAgentIds(ids => [...ids, id]); setPicker(null); }}
+            onClose={() => setPicker(null)}
+          />
+        )}
+        {picker === "context" && (
+          <CanvasPicker
+            title="添加背景资料"
+            empty="可用的知识源已经全部加入画布"
+            items={availableSources.map(s => ({ id: s.id, label: s.title, sub: `${s.type} · ${s.scope}`, color: "#6366f1", icon: "FileText" }))}
+            onPick={id => { setContextIds(ids => [...ids, id]); setPicker(null); }}
+            onClose={() => setPicker(null)}
+          />
+        )}
+
         <div style={{
           position: "absolute", bottom: 24, left: "50%", transform: "translateX(-50%)",
           display: "flex", gap: 4, padding: 4,
           background: "rgba(15,23,42,0.92)", border: "1px solid rgba(255,255,255,0.08)",
           borderRadius: 12, backdropFilter: "blur(20px)", zIndex: 10
         }}>
-          {["Plus", "User", "FileText", "GitBranch", "PlayCircle"].map((ic, i) => (
-            <button key={i} style={{ width: 36, height: 36, borderRadius: 8, color: "rgba(255,255,255,0.7)", display: "grid", placeItems: "center" }}>
-              {React.createElement(Icon[ic], { size: 16 })}
-            </button>
-          ))}
+          <CanvasToolbarButton title="添加 Agent" icon="User" active={picker === "agent"} onClick={() => setPicker(picker === "agent" ? null : "agent")} />
+          <CanvasToolbarButton title="添加背景资料" icon="FileText" active={picker === "context"} onClick={() => setPicker(picker === "context" ? null : "context")} />
+          <CanvasToolbarButton title="重置画布" icon="RefreshCw" onClick={() => { setAgentIds(Agents.map(a => a.id)); setContextIds(StrategyQuestion.context.slice(0, 3)); setPicker(null); }} />
+          <CanvasToolbarButton title="清空画布" icon="X" onClick={() => { setAgentIds([]); setContextIds([]); setPicker(null); }} />
           <div style={{ width: 1, background: "rgba(255,255,255,0.1)", margin: "4px 4px" }} />
-          <button className="btn btn--primary btn--sm" style={{ padding: "0 12px" }}><Icon.Sparkles size={13} /> 进入下一轮</button>
+          <button className="btn btn--primary btn--sm" style={{ padding: "0 12px" }} disabled={agentIds.length === 0}>
+            <Icon.Sparkles size={13} /> 进入下一轮
+          </button>
         </div>
       </div>
     </div>

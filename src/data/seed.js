@@ -318,20 +318,117 @@ export const AUDIT_CATEGORIES = [
   { v: "config",      label: "配置变更",    color: "#94a3b8" }
 ];
 
+// `link` is a hint that lets the audit panel route to the relevant entity
+// page when a row is clicked. Routes match the keys in App.jsx.
 export const AuditLog = [
-  { id: "au-1", at: "2026-04-26 11:42", actor: "苏婉",   ip: "10.20.32.18",  category: "knowledge", severity: "info",   action: "上传 38 条 CMF 知识条目",    target: "知识域 · CMF (色彩材质工艺)", scope: "工业设计部" },
-  { id: "au-2", at: "2026-04-26 11:18", actor: "李慕白", ip: "10.20.32.41",  category: "okr",       severity: "info",   action: "运行 Skill — 设计简报生成",   target: "项目 · 全屋净水 2.0",         scope: "工业设计部" },
-  { id: "au-3", at: "2026-04-26 10:55", actor: "苏婉",   ip: "10.20.32.18",  category: "skill",     severity: "warn",   action: "工作流 CMF 可行性检查 进入审批等待", target: "工作流 · CMF 可行性检查",    scope: "CMF 中台" },
-  { id: "au-4", at: "2026-04-26 09:40", actor: "周岚",   ip: "10.40.55.7",   category: "assistant", severity: "info",   action: "更新意图路由规则",             target: "规则 · 渠道 / 价格异常",       scope: "渠道运营 (COP)" },
-  { id: "au-5", at: "2026-04-26 09:24", actor: "战略画布", ip: "—",          category: "assistant", severity: "info",   action: "完成第 3 轮多智能体研讨",       target: "战略问题 · DTC 渠道",          scope: "公司" },
-  { id: "au-6", at: "2026-04-26 09:10", actor: "陈思源", ip: "10.20.32.62",  category: "knowledge", severity: "info",   action: "标记一条 PVD 工艺答案为 不准确", target: "知识域 · 工艺",                scope: "工业设计部" },
-  { id: "au-7", at: "2026-04-26 08:50", actor: "Tomas 朱", ip: "10.10.4.2",  category: "config",    severity: "warn",   action: "下线模型 文心 4 Turbo (灾备)",  target: "模型 · ernie-4-turbo",         scope: "公司" },
-  { id: "au-8", at: "2026-04-26 08:15", actor: "Joyce 黄", ip: "10.30.10.14", category: "model",     severity: "info",   action: "切换 财务 / HR / 法务 走本地 LLaMA-70B", target: "路由策略 · 敏感数据",        scope: "公司" },
-  { id: "au-9", at: "2026-04-25 22:40", actor: "高翔",   ip: "10.40.55.18",  category: "okr",       severity: "warn",   action: "新增风险条目",                 target: "项目 · 县域服务网络重塑",     scope: "服务部 / 县域" },
-  { id: "au-10", at: "2026-04-25 18:02", actor: "陈志远", ip: "10.10.1.1",  category: "auth",      severity: "info",   action: "登录 (SSO · 企业微信)",         target: "—",                            scope: "公司" },
-  { id: "au-11", at: "2026-04-25 16:48", actor: "未知",  ip: "203.0.113.42", category: "auth",      severity: "danger", action: "外部 IP 尝试以 cop@partner 身份登录,被拦截", target: "—",                  scope: "外部" },
-  { id: "au-12", at: "2026-04-25 15:30", actor: "黄毅",  ip: "10.10.4.21",   category: "config",    severity: "info",   action: "工业设计部 助手 上线全员",     target: "部门 · 工业设计 / 小龙虾",     scope: "公司" }
+  { id: "au-1",  at: "2026-04-26 11:42", actor: "苏婉",     ip: "10.20.32.18",  category: "knowledge", severity: "info",   action: "上传 38 条 CMF 知识条目",                target: "知识域 · CMF (色彩材质工艺)", scope: "工业设计部",           link: { page: "knowledge" } },
+  { id: "au-2",  at: "2026-04-26 11:18", actor: "李慕白",   ip: "10.20.32.41",  category: "okr",       severity: "info",   action: "运行 Skill — 设计简报生成",              target: "项目 · 全屋净水 2.0",         scope: "工业设计部",           link: { page: "okr" } },
+  { id: "au-3",  at: "2026-04-26 10:55", actor: "苏婉",     ip: "10.20.32.18",  category: "skill",     severity: "warn",   action: "工作流 CMF 可行性检查 进入审批等待",       target: "工作流 · CMF 可行性检查",      scope: "CMF 中台",             link: { page: "workflows" } },
+  { id: "au-4",  at: "2026-04-26 09:40", actor: "周岚",     ip: "10.40.55.7",   category: "assistant", severity: "info",   action: "更新意图路由规则",                       target: "规则 · 渠道 / 价格异常",         scope: "渠道运营 (COP)",        link: { page: "assistants" } },
+  { id: "au-5",  at: "2026-04-26 09:24", actor: "战略画布", ip: "—",            category: "assistant", severity: "info",   action: "完成第 3 轮多智能体研讨",                 target: "战略问题 · DTC 渠道",          scope: "公司",                  link: { page: "strategy" } },
+  { id: "au-6",  at: "2026-04-26 09:10", actor: "陈思源",   ip: "10.20.32.62",  category: "knowledge", severity: "info",   action: "标记一条 PVD 工艺答案为 不准确",          target: "知识域 · 工艺",                  scope: "工业设计部",           link: { page: "knowledge" } },
+  { id: "au-7",  at: "2026-04-26 08:50", actor: "Tomas 朱", ip: "10.10.4.2",    category: "config",    severity: "warn",   action: "下线模型 文心 4 Turbo (灾备)",            target: "模型 · ernie-4-turbo",           scope: "公司",                  link: { page: "admin" } },
+  { id: "au-8",  at: "2026-04-26 08:15", actor: "Joyce 黄", ip: "10.30.10.14",  category: "model",     severity: "info",   action: "切换 财务 / HR / 法务 走本地 LLaMA-70B",  target: "路由策略 · 敏感数据",           scope: "公司",                  link: { page: "admin" } },
+  { id: "au-9",  at: "2026-04-25 22:40", actor: "高翔",     ip: "10.40.55.18",  category: "okr",       severity: "warn",   action: "新增风险条目",                            target: "项目 · 县域服务网络重塑",      scope: "服务部 / 县域",          link: { page: "okr" } },
+  { id: "au-10", at: "2026-04-25 18:02", actor: "陈志远",   ip: "10.10.1.1",    category: "auth",      severity: "info",   action: "登录 (SSO · 企业微信)",                   target: "—",                              scope: "公司",                  link: null },
+  { id: "au-11", at: "2026-04-25 16:48", actor: "未知",     ip: "203.0.113.42", category: "auth",      severity: "danger", action: "外部 IP 尝试以 cop@partner 身份登录,被拦截", target: "—",                            scope: "外部",                  link: null },
+  { id: "au-12", at: "2026-04-25 15:30", actor: "黄毅",     ip: "10.10.4.21",   category: "config",    severity: "info",   action: "工业设计部 助手 上线全员",                 target: "部门 · 工业设计 / 小龙虾",      scope: "公司",                  link: { page: "department", deptId: "industrial-design" } }
 ];
+
+// =============== Knowledge Ingest Queue ====================================
+// Items in the parsing / embedding / review pipeline. Drives the
+// 采集队列 tab on the Knowledge Center.
+export const INGEST_STATES = [
+  { v: "queued",   label: "排队中",   color: "#94a3b8" },
+  { v: "fetching", label: "抓取中",   color: "#0EA5E9" },
+  { v: "parsing",  label: "解析中",   color: "#4F46E5" },
+  { v: "embedding", label: "向量化",  color: "#7C3AED" },
+  { v: "tagging",  label: "打标签",   color: "#EC4899" },
+  { v: "review",   label: "待审核",   color: "#F59E0B" },
+  { v: "approved", label: "已入库",   color: "#10B981" },
+  { v: "rejected", label: "已拒绝",   color: "#ef4444" },
+  { v: "failed",   label: "失败",     color: "#dc2626" }
+];
+
+export const IngestQueueItems = [
+  { id: "iq-1", name: "Q1 财务月度复盘.pptx",            type: "PPT",  size: "8.4MB",  state: "parsing",  progress: 62,  scope: "财务",       owner: "Joyce 黄",     uploaded: "10 分钟前", error: null },
+  { id: "iq-2", name: "竞品 G3 发布会要点.docx",          type: "DOC",  size: "1.6MB",  state: "embedding", progress: 88, scope: "工业设计",   owner: "苏婉",         uploaded: "18 分钟前", error: null },
+  { id: "iq-3", name: "城运 BP/SC 培训纪要.txt",          type: "TXT",  size: "240KB", state: "tagging",   progress: 41, scope: "渠道运营",   owner: "汪洋",         uploaded: "23 分钟前", error: null },
+  { id: "iq-4", name: "市场调研问卷 Apr.xlsx",             type: "XLSX", size: "12.4MB", state: "queued",    progress: 0,  scope: "市场部",     owner: "Anna 林",      uploaded: "32 分钟前", error: null },
+  { id: "iq-5", name: "https://aowei.com/report/2026q1",   type: "URL",  size: "—",     state: "fetching",  progress: 18, scope: "公司",       owner: "战略办",       uploaded: "38 分钟前", error: null },
+  { id: "iq-6", name: "供应商资质年检 2026.zip",          type: "ZIP",  size: "184MB", state: "review",    progress: 100, scope: "供应链",     owner: "宋平",         uploaded: "1 小时前",  error: null },
+  { id: "iq-7", name: "县域服务试点 二期数据.xlsx",        type: "XLSX", size: "6.2MB", state: "review",    progress: 100, scope: "服务部",     owner: "高翔",         uploaded: "2 小时前",  error: null },
+  { id: "iq-8", name: "外部供应商图集 (未鉴权).rar",       type: "RAR",  size: "—",     state: "failed",    progress: 14, scope: "—",          owner: "陈思源",       uploaded: "3 小时前",  error: "压缩包加密 — 无法解析" }
+];
+
+// =============== Department Overview Activity ============================
+// Per-department feed of frequent questions and inbox items used by the
+// DeptOverview component. Falls back to a generic shape for departments
+// that aren't seeded.
+export const DeptActivity = {
+  "industrial-design": {
+    questions: [
+      { q: "PVD 工艺与喷涂在零冷水热水器外壳上的成本对比?", uses: 24, source: "CMF + 工艺知识库" },
+      { q: "G3 新风机在欧标认证上还差哪些?",                 uses: 18, source: "竞品 + 海外法规" },
+      { q: "全屋净水二代 2026 春夏色彩主推?",                uses: 15, source: "趋势 + CMF" },
+      { q: "县域市场厨电单价带在 1500-2500 的 SKU 缺口?",     uses: 11, source: "奥维 + 9 大品类" }
+    ],
+    inbox: [
+      { type: "review", text: "苏婉 上传了 38 条 CMF 条目待审核",         color: "var(--warning)" },
+      { type: "alert",  text: "竞品分析知识域覆盖度低于 70%",            color: "var(--warning)" },
+      { type: "task",   text: "CMF Phase 2 项目里程碑下周到期",           color: "var(--vel-indigo)" },
+      { type: "fb",     text: "孙阳 反馈 PVD 工艺成本数据需更新",        color: "var(--danger)" }
+    ]
+  },
+  "service": {
+    questions: [
+      { q: "上海地区净水器投诉率为何上升?",     uses: 38, source: "工单 + 故障代码库" },
+      { q: "X 系列零冷水首报 E04 故障如何处理?", uses: 27, source: "故障 SOP" },
+      { q: "县域 SC 备件覆盖率最低的 5 城?",     uses: 16, source: "服务网络 + 备件库存" },
+      { q: "用户反馈安装时间过长,根因?",        uses: 12, source: "工单 + 投诉归因" }
+    ],
+    inbox: [
+      { type: "alert",  text: "县域试点城市 NPS 跌破 40",              color: "var(--danger)" },
+      { type: "task",   text: "Q2 SC 招商进度落后 30%",                  color: "var(--warning)" },
+      { type: "review", text: "高翔 上传县域复盘待审核",                color: "var(--warning)" },
+      { type: "fb",     text: "陈刚 提议为新工单类型补充 SOP",          color: "var(--vel-indigo)" }
+    ]
+  },
+  "cop": {
+    questions: [
+      { q: "上海地区线上线下同价覆盖率为何下滑?",     uses: 22, source: "渠道 + 价格异常" },
+      { q: "BP 经销商满意度下降的根因?",              uses: 19, source: "渠道 NPS" },
+      { q: "县域 SC 招商落后的省份与原因?",            uses: 14, source: "渠道铺设 + 城市运营" },
+      { q: "DTC 直营冲突 escalation 5 起,如何解决?", uses: 9,  source: "DTC + 协同手册" }
+    ],
+    inbox: [
+      { type: "alert",  text: "三角协同覆盖率仍 41% — 落后目标",          color: "var(--warning)" },
+      { type: "task",   text: "二线 80 城启动,需要本周对齐",              color: "var(--vel-indigo)" },
+      { type: "fb",     text: "汪洋 反馈中台数据切换中的 3 处缺口",         color: "var(--warning)" }
+    ]
+  },
+  "supply-chain": {
+    questions: [
+      { q: "全屋净水套系 BOM 排产瓶颈在哪?",           uses: 11, source: "供应链 + 产能模型" },
+      { q: "RoHS 报告还差哪些材料?",                   uses: 8,  source: "海外法规" },
+      { q: "膜组件供应商杭州东方的 12 月到货风险?",      uses: 6,  source: "供应商档案" }
+    ],
+    inbox: [
+      { type: "alert", text: "膜组件单一来源风险待评估",     color: "var(--warning)" },
+      { type: "task",  text: "Q3 柔性产线改造立项",          color: "var(--vel-indigo)" }
+    ]
+  },
+  "marketing": {
+    questions: [
+      { q: "DTC 旗舰店内容工厂的核心节奏?",        uses: 14, source: "GTM + 内容运营" },
+      { q: "局改套系叙事要点?",                    uses: 10, source: "品牌 + 用户研究" }
+    ],
+    inbox: [
+      { type: "task", text: "5 月样板间直播首秀准备",     color: "var(--vel-indigo)" },
+      { type: "fb",   text: "周婕 提议联合工业设计部出 PR", color: "var(--success)" }
+    ]
+  }
+};
 
 // Recent check-in records (history) for KRs. Each entry = one update event.
 // progress is the value at that point in time, so the series is monotonic
