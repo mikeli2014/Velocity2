@@ -378,6 +378,63 @@ class AuditEventOut(_CamelModel):
     link: dict[str, Any] | None = None
 
 
+# --- Strategy debate ----------------------------------------------------
+
+
+class DebateMessageOut(_CamelModel):
+    id: str
+    question_id: str
+    round: int
+    agent_id: str
+    stance: str
+    text: str
+    sources: list[str] = Field(default_factory=list)
+    model: str | None = None
+
+
+class DebateRoundIn(_CamelModel):
+    """Optional inputs to ``POST .../debate/round``. If ``agent_ids`` is
+    omitted, the orchestrator uses the question's own agents list.
+    """
+
+    agent_ids: list[str] | None = None
+    # Optional override: which round number to write (defaults to next).
+    round: int | None = None
+
+
+class DebateRoundOut(_CamelModel):
+    round: int
+    messages: list[DebateMessageOut]
+
+
+class DebateSynthesisOut(_CamelModel):
+    text: str
+    pro: int = 0
+    con: int = 0
+    concern: int = 0
+    model: str
+
+
+# --- Routing classifier (Haiku) ----------------------------------------
+
+
+class RouteRequestIn(_CamelModel):
+    text: str
+    # Optional scope hint — when set, only rules belonging to a matching
+    # department are considered.
+    dept_id: str | None = None
+
+
+class RouteResultOut(_CamelModel):
+    intent: str | None = None
+    rule_id: str | None = None
+    dept_id: str | None = None
+    skill_id: str | None = None
+    confidence: float = 0.0
+    rationale: str | None = None
+    model: str
+
+
 # --- Chat (Anthropic) ---------------------------------------------------
 
 

@@ -265,6 +265,28 @@ class StrategyQuestion(Base):
     agents: Mapped[list[str]] = mapped_column(JSON, default=list)     # agent IDs
 
 
+class DebateMessage(Base):
+    """One agent's contribution to a strategy debate round.
+
+    Append-only — a row per (question, round, agent). Multi-agent
+    orchestration writes the rows synchronously; the WarCouncil panel
+    groups by round on read. ``stance`` is one of ``pro|con|concern``,
+    matching the seed and the existing UI color logic.
+    """
+
+    __tablename__ = "debate_messages"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    question_id: Mapped[str] = mapped_column(ForeignKey("strategy_questions.id", ondelete="CASCADE"))
+    round: Mapped[int] = mapped_column(default=1)
+    agent_id: Mapped[str] = mapped_column(String)
+    stance: Mapped[str] = mapped_column(String, default="concern")
+    text: Mapped[str] = mapped_column(Text)
+    sources: Mapped[list[str]] = mapped_column(JSON, default=list)
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
+
+
 # --- Skills / Workflows / Runs ----------------------------------------
 
 

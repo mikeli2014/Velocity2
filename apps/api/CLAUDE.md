@@ -49,8 +49,13 @@ apps/api/
 │       ├── knowledge.py   Knowledge Center: domains + overview aggregate
 │       ├── automation.py  Skill packs / workflows / runs
 │       ├── inbox.py       Notifications / routing / audit
-│       └── chat.py        Anthropic chat (prompt caching) — backs the
-│                          AssistantChat panel + Skill RunDialog
+│       ├── chat.py        Anthropic chat (prompt caching) — backs the
+│       │                  AssistantChat panel + Skill RunDialog
+│       ├── debate.py      Multi-agent strategy debate orchestration —
+│       │                  backs the WarCouncil tab (per-agent Sonnet
+│       │                  calls + cached company/question prefix)
+│       └── route.py       Haiku 4.5 routing classifier — backs the
+│                          "测试路由" tester in Assistants & Governance
 ├── tests/                 pytest happy-path coverage
 ├── requirements.txt       runtime deps
 ├── requirements-dev.txt   pytest / httpx / ruff
@@ -119,7 +124,10 @@ add a JSON-snapshot diff guard (queued for Phase 2), the rule is:
 > change in `apps/api/velocity_api/seed_data.py` in the same commit.
 
 Entities currently mirrored: `Company`, `Departments`, `Objectives` (with
-`KRs`), `Projects`, `DecisionsRich`, `KnowledgeDomains`, `KnowledgeSources`.
+`KRs`), `Projects`, `DecisionsRich`, `KnowledgeDomains`, `KnowledgeSources`,
+`Activity`, `Agents`, `StrategyQuestions`, `DebateMessages`, `SkillPacks`,
+`Workflows`, `WorkflowRuns`, `IngestQueue`, `Notifications`,
+`AssistantRoutingRules`, `AuditLog`.
 
 The loader runs at app startup if `VELOCITY_API_AUTO_SEED=true` (default)
 **and** the DB looks empty. Cloud Run's ephemeral disk means the SQLite DB
@@ -210,7 +218,7 @@ Decision 8 overturned: unified single-service deploy".
 | | Phase 1 ✅ shipped | Phase 2 (queued) |
 |---|---|---|
 | **CRUD** | Objectives + KRs full CRUD; KnowledgeDomain PATCH; everything else read-only | Project / Decision / KnowledgeSource writes |
-| **AI** | `/api/v1/chat` with prompt caching (Sonnet 4.6 default; Haiku 4.5 reserved for routing); soft-falls to demo output when key missing | Multi-agent debate orchestration; Haiku routing classifier wired |
+| **AI** | `/api/v1/chat` (Sonnet 4.6) + `/api/v1/strategy-questions/{id}/debate` (multi-agent Sonnet) + `/api/v1/route` (Haiku 4.5 classifier). All use prompt caching and soft-fall to demo output when key missing. | Streaming responses; agent self-reflection / disagreement loops |
 | **RAG** | None | pgvector + document parser + embedding service |
 | **Auth** | None (public Cloud Run) | `X-User-Id` header → real OAuth / JWT |
 | **Frontend wiring** | None — frontend still reads `seed.js` | `useApi(...)` hook; per-page cutover |

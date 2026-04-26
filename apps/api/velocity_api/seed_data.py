@@ -490,6 +490,36 @@ STRATEGY_QUESTIONS: list[dict[str, Any]] = [
 ]
 
 
+# --- Debate messages -----------------------------------------------------
+# Mirror of `src/data/seed.js` :: DebateMessages — all entries hang off
+# question sq-1 (FY26 DTC investment question). IDs are stable so the
+# seed is idempotent.
+
+DEBATE_MESSAGES: list[dict[str, Any]] = [
+    {"id": "dm-1", "question_id": "sq-1", "agent_id": "ag-product", "round": 1, "stance": "pro",
+     "text": "线上 DTC 是把全屋净水方案作为整体卖给用户的最佳载体——线下导购无法系统讲方案,线上场景化更利于客单价提升。",
+     "sources": ["ks-2", "ks-4"], "model": None},
+    {"id": "dm-2", "question_id": "sq-1", "agent_id": "ag-finance", "round": 1, "stance": "concern",
+     "text": "DTC 短期 ROI 弱:CAC 同比上涨 28%,而线下单店产出仍稳定。建议把投入控制在营销总盘 18% 以内并按月复盘。",
+     "sources": ["ks-4"], "model": None},
+    {"id": "dm-3", "question_id": "sq-1", "agent_id": "ag-gtm", "round": 1, "stance": "pro",
+     "text": "Q1 线上同行渗透率已达 41%,再不加码就丢窗口期。建议 30% 预算切到内容/直播,并保留服务交付能力。",
+     "sources": ["ks-4"], "model": None},
+    {"id": "dm-4", "question_id": "sq-1", "agent_id": "ag-risk", "round": 2, "stance": "con",
+     "text": "BP/SC/SA 三角协同尚未稳定的城市,线上加码会引发渠道冲突,建议先收口同价机制再放量。",
+     "sources": ["ks-3"], "model": None},
+    {"id": "dm-5", "question_id": "sq-1", "agent_id": "ag-ops", "round": 2, "stance": "concern",
+     "text": "DTC 售后履约目前仅覆盖一二线城市,县域订单退货率达 11.4%——必须先有服务网络再扩规模。",
+     "sources": ["ks-6"], "model": None},
+    {"id": "dm-6", "question_id": "sq-1", "agent_id": "ag-supply", "round": 2, "stance": "concern",
+     "text": "全屋净水套装 BOM 当前还是项目级管理,DTC 大单会暴露排产瓶颈。建议把套系上柔性产线。",
+     "sources": [], "model": None},
+    {"id": "dm-7", "question_id": "sq-1", "agent_id": "ag-org", "round": 3, "stance": "pro",
+     "text": "DTC 团队需要内容 + 数据双能力,目前缺口约 22 人。可与市场部共建,而不是单建。",
+     "sources": [], "model": None},
+]
+
+
 # --- SkillPacks ----------------------------------------------------------
 
 SKILL_PACKS: list[dict[str, Any]] = [
@@ -676,7 +706,7 @@ def load_seed(db) -> dict[str, int]:
 
     inserted = {"company": 0, "departments": 0, "objectives": 0, "key_results": 0,
                 "projects": 0, "decisions": 0, "knowledge_domains": 0, "knowledge_sources": 0,
-                "activity": 0, "agents": 0, "strategy_questions": 0,
+                "activity": 0, "agents": 0, "strategy_questions": 0, "debate_messages": 0,
                 "skill_packs": 0, "workflows": 0, "workflow_runs": 0,
                 "ingest_queue": 0, "notifications": 0, "routing_rules": 0, "audit_events": 0}
 
@@ -735,6 +765,11 @@ def load_seed(db) -> dict[str, int]:
         if db.get(models.StrategyQuestion, sq["id"]) is None:
             db.add(models.StrategyQuestion(**sq))
             inserted["strategy_questions"] += 1
+
+    for dm in DEBATE_MESSAGES:
+        if db.get(models.DebateMessage, dm["id"]) is None:
+            db.add(models.DebateMessage(**dm))
+            inserted["debate_messages"] += 1
 
     for sp in SKILL_PACKS:
         if db.get(models.SkillPack, sp["id"]) is None:

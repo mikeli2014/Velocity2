@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Icon, Modal, makeId } from "../components/primitives.jsx";
-import { StrategyQuestion, StrategyQuestions, STRATEGY_STATUSES, Agents, DebateMessages, KnowledgeSources, Objectives } from "../data/seed.js";
+import { StrategyQuestion, StrategyQuestions, STRATEGY_STATUSES, Agents, DebateMessages as SeedDebateMessages, KnowledgeSources, Objectives } from "../data/seed.js";
+import { useApi, apiPost, ApiError } from "../lib/api.js";
 
 export function StrategyPage() {
   const [tab, setTab] = useState("canvas");
@@ -60,7 +61,7 @@ export function StrategyPage() {
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
         {tab === "registry" && <QuestionRegistry questions={questions} currentId={questionId} onSelect={(id) => { setQuestionId(id); setTab("canvas"); }} onNew={() => setCreating(true)} />}
         {tab === "canvas" && (isPrimary ? <StrategyCanvas /> : <StrategyPlaceholder variant="canvas" />)}
-        {tab === "war" && (isPrimary ? <WarCouncil /> : <StrategyPlaceholder variant="war" />)}
+        {tab === "war" && (isPrimary ? <WarCouncil questionId={question.id} /> : <StrategyPlaceholder variant="war" />)}
         {tab === "options" && (isPrimary ? <StrategyOptions /> : <StrategyPlaceholder variant="options" />)}
         {tab === "output" && (isPrimary ? <StructuredOutput /> : <StrategyPlaceholder variant="output" />)}
       </div>
@@ -411,7 +412,7 @@ function StrategyCanvas() {
         </div>
 
         {agentNodes.map(p => {
-          const lastMsg = DebateMessages.filter(m => m.agent === p.id).slice(-1)[0];
+          const lastMsg = SeedDebateMessages.filter(m => m.agent === p.id).slice(-1)[0];
           return (
             <div key={p.id} style={{
               position: "absolute", left: `${p.x}%`, top: `${p.y}%`, transform: "translate(-50%, -50%)",
@@ -521,20 +522,111 @@ function StrategyCanvas() {
   );
 }
 
-function WarCouncil() {
+function WarCouncil({ questionId }) {
+  // Live debate transcript from the API; falls back to the seed when
+  // the backend isn't reachable so the demo still feels populated.
+  const { data: apiMessages, refresh } = useApi(`/api/v1/strategy-questions/${questionId}/debate`);
+  const messages = apiMessages ?? SeedDebateMessages.map(m => ({
+    // Normalize seed shape to the wire shape used below.
+    id: `${m.agent}-${m.round}`,
+    round: m.round,
+    agentId: m.agent,
+    stance: m.stance,
+    text: m.text,
+    sources: m.sources || []
+  }));
+  const rounds = Array.from(new Set(messages.map(m => m.round))).sort((a, b) => a - b);
+  if (rounds.length === 0) rounds.push(1);
+  const nextRound = (rounds[rounds.length - 1] || 0) + 1;
+
+  const [running, setRunning] = useState(false);
+  const [synth, setSynth] = useState(null);
+  const [synthLoading, setSynthLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function runRound() {
+    if (running) return;
+    setRunning(true);
+    setError(null);
+    try {
+      await apiPost(`/api/v1/strategy-questions/${questionId}/debate/round`, {});
+      // Synthesis goes stale once new messages land.
+      setSynth(null);
+      refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : String(err));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function runSynthesis() {
+    if (synthLoading) return;
+    setSynthLoading(true);
+    setError(null);
+    try {
+      const res = await apiPost(`/api/v1/strategy-questions/${questionId}/debate/synthesis`, {});
+      setSynth(res);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : String(err));
+    } finally {
+      setSynthLoading(false);
+    }
+  }
+
+  // Default synthesis when the live one hasn't been generated yet — keeps
+  // the page populated for the canned demo data.
+  const fallbackSynth = {
+    text: '7 个 Agent 中 3 个赞成(产品/GTM/组织)、3 个保留(财务/运营/供应链)、1 个反对(风险)。\n核心张力在于"窗口期 vs 渠道冲突 vs 履约能力"。建议生成 3 个战略选项,分别对应 激进 / 稳健 / 渐进 投入节奏,并在 OKR 草案中明确县域服务网络作为前置条件。',
+    pro: messages.filter(m => m.stance === "pro").length,
+    con: messages.filter(m => m.stance === "con").length,
+    concern: messages.filter(m => m.stance === "concern").length
+  };
+  const display = synth || fallbackSynth;
+
   return (
     <div style={{ height: "100%", overflow: "auto", background: "#0B1220", color: "#fff" }} className="scroll">
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 40px" }}>
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: 18 }}>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>
+            已运行 <strong style={{ color: "#fff" }}>{rounds.length}</strong> 轮 · 共 {messages.length} 条发言
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <button
+              className="btn btn--sm"
+              style={{ background: "rgba(255,255,255,0.06)", color: "#fff", border: "1px solid rgba(255,255,255,0.16)" }}
+              onClick={runSynthesis}
+              disabled={synthLoading || messages.length === 0}
+            >
+              <Icon.Sparkles size={12} /> {synthLoading ? "生成中…" : "重新生成摘要"}
+            </button>
+            <button
+              className="btn btn--primary btn--sm"
+              onClick={runRound}
+              disabled={running}
+            >
+              <Icon.PlayCircle size={13} /> {running ? `运行第 ${nextRound} 轮…` : `运行第 ${nextRound} 轮`}
+            </button>
+          </div>
+        </div>
+        {error && (
+          <div style={{ marginBottom: 16, padding: "10px 14px", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, color: "#fca5a5", fontSize: 12 }}>
+            {error === "anthropic_not_configured"
+              ? "未配置 ANTHROPIC_API_KEY:演示模式下 War Council 仅展示种子数据。"
+              : `请求失败:${error}`}
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {[1, 2, 3].map(round => (
+          {rounds.map(round => (
             <div key={round}>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700, padding: "16px 0 10px", borderBottom: "1px solid rgba(255,255,255,0.08)", marginBottom: 12 }}>
-                第 {round} 轮 · {round === 1 ? "首轮陈述" : round === 2 ? "交叉质询" : "立场收敛"}
+                第 {round} 轮 · {round === 1 ? "首轮陈述" : round === 2 ? "交叉质询" : round === 3 ? "立场收敛" : "继续辩论"}
               </div>
-              {DebateMessages.filter(m => m.round === round).map((m, i) => {
-                const ag = Agents.find(a => a.id === m.agent);
+              {messages.filter(m => m.round === round).map((m, i) => {
+                const ag = Agents.find(a => a.id === m.agentId);
+                if (!ag) return null;
                 return (
-                  <div key={i} style={{ display: "flex", gap: 14, marginBottom: 16 }}>
+                  <div key={m.id || i} style={{ display: "flex", gap: 14, marginBottom: 16 }}>
                     <div style={{ width: 38, height: 38, borderRadius: 10, background: ag.color, color: "#fff", display: "grid", placeItems: "center", flexShrink: 0 }}>
                       {React.createElement(Icon[ag.icon] || Icon.User, { size: 17 })}
                     </div>
@@ -549,14 +641,14 @@ function WarCouncil() {
                           color: m.stance === "pro" ? "#6ee7b7" : m.stance === "con" ? "#fca5a5" : "#fcd34d"
                         }}>{m.stance === "pro" ? "赞成" : m.stance === "con" ? "反对" : "保留"}</span>
                       </div>
-                      <div style={{ fontSize: 13.5, color: "rgba(255,255,255,0.88)", lineHeight: 1.65, marginBottom: m.sources.length ? 10 : 0 }}>{m.text}</div>
-                      {m.sources.length > 0 && (
+                      <div style={{ fontSize: 13.5, color: "rgba(255,255,255,0.88)", lineHeight: 1.65, marginBottom: (m.sources || []).length ? 10 : 0, whiteSpace: "pre-wrap" }}>{m.text}</div>
+                      {(m.sources || []).length > 0 && (
                         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                           {m.sources.map(sid => {
                             const src = KnowledgeSources.find(k => k.id === sid);
                             return (
                               <span key={sid} className="pill" style={{ background: "rgba(99,102,241,0.18)", color: "#c4b5fd" }}>
-                                <Icon.FileText size={10} /> {src?.title.slice(0, 22)}…
+                                <Icon.FileText size={10} /> {src ? src.title.slice(0, 22) + "…" : sid}
                               </span>
                             );
                           })}
@@ -572,13 +664,15 @@ function WarCouncil() {
         <div style={{ marginTop: 24, padding: 18, background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 12 }}>
           <div className="row" style={{ gap: 10, marginBottom: 8 }}>
             <Icon.Sparkles size={16} style={{ color: "#c4b5fd" }} />
-            <div style={{ fontWeight: 700, fontSize: 13, color: "#fff" }}>研讨摘要 · 由 Velocity 自动生成</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: "#fff" }}>研讨摘要 · {synth ? `由 ${synth.model || "Velocity"} 实时生成` : "由 Velocity 自动生成"}</div>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
+              <strong style={{ color: "#6ee7b7" }}>{display.pro} 赞成</strong> ·{" "}
+              <strong style={{ color: "#fcd34d" }}>{display.concern} 保留</strong> ·{" "}
+              <strong style={{ color: "#fca5a5" }}>{display.con} 反对</strong>
+            </span>
           </div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", lineHeight: 1.7 }}>
-            7 个 Agent 中 <strong style={{ color: "#6ee7b7" }}>3 个赞成</strong>(产品/GTM/组织)、
-            <strong style={{ color: "#fcd34d" }}> 3 个保留</strong>(财务/运营/供应链)、
-            <strong style={{ color: "#fca5a5" }}> 1 个反对</strong>(风险)。
-            核心张力在于"窗口期 vs 渠道冲突 vs 履约能力"。建议生成 3 个战略选项,分别对应 激进 / 稳健 / 渐进 投入节奏,并在 OKR 草案中明确县域服务网络作为前置条件。
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+            {display.text}
           </div>
         </div>
       </div>

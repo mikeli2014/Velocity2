@@ -1,7 +1,7 @@
 import React, { useRef, useState, useMemo } from "react";
 import { Icon, KpiCard, HealthPill, Modal, ConfirmModal, makeId } from "../components/primitives.jsx";
 import { Departments, AssistantRoutingRules as SeedRoutingRules, ROUTE_PRIORITIES, SkillPacks, AuditLog as SeedAuditLog, AUDIT_CATEGORIES } from "../data/seed.js";
-import { useApi } from "../lib/api.js";
+import { useApi, apiPost, ApiError } from "../lib/api.js";
 
 const ROLE_OPTIONS = [
   { v: "ceo",   label: "CEO" },
@@ -170,6 +170,8 @@ export function AssistantsPage({ setRoute }) {
         </table>
       </div>
 
+      <RouteTester rules={rules} />
+
       <div className="card">
         <div className="card__head"><div className="card__title"><Icon.Activity size={14} /> 意图路由 · 最近 24 小时</div></div>
         <div style={{ padding: 22 }}>
@@ -208,6 +210,109 @@ export function AssistantsPage({ setRoute }) {
           onConfirm={() => del(confirm.r.id)}
         />
       )}
+    </div>
+  );
+}
+
+// Routing tester — sends a free-form prompt to /api/v1/route (Haiku-backed)
+// and shows which rule the classifier would pick. Soft-fails when the API
+// is unreachable so the page still renders the panel for design review.
+function RouteTester({ rules }) {
+  const [text, setText] = useState("");
+  const [pending, setPending] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function run() {
+    if (!text.trim() || pending) return;
+    setPending(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await apiPost("/api/v1/route", { text });
+      setResult(res);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : String(err));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const matchedRule = result?.ruleId ? rules.find(r => r.id === result.ruleId) : null;
+  const matchedDept = matchedRule ? Departments.find(d => d.id === matchedRule.targetDept) : null;
+  const matchedSkill = matchedRule?.targetSkill ? SkillPacks.find(s => s.id === matchedRule.targetSkill) : null;
+
+  const samples = [
+    "PVD 工艺与喷涂的成本对比?",
+    "全屋净水套装客单价怎么提升?",
+    "县域服务网络的退货率高怎么办?",
+    "市场部春夏色彩主推方向?"
+  ];
+
+  return (
+    <div className="card" style={{ marginBottom: 20 }}>
+      <div className="card__head">
+        <div className="card__title"><Icon.Sparkles size={14} /> 路由测试 · Haiku 4.5 实时分类</div>
+        <span style={{ fontSize: 11, color: "var(--fg3)" }}>把一句用户提问交给分类器,看它会落到哪条规则。</span>
+      </div>
+      <div style={{ padding: 18 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+          <input
+            className="input"
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && !pending && run()}
+            placeholder="例如:PVD 工艺与喷涂的成本对比?"
+            style={{ flex: 1 }}
+          />
+          <button
+            className="btn btn--primary btn--sm"
+            onClick={run}
+            disabled={pending || !text.trim()}
+            style={(pending || !text.trim()) ? { opacity: 0.5, cursor: "not-allowed" } : {}}
+          >
+            <Icon.PlayCircle size={13} /> {pending ? "分类中…" : "测试路由"}
+          </button>
+        </div>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+          {samples.map(s => (
+            <button key={s} className="btn btn--ghost btn--sm" style={{ fontSize: 11 }} onClick={() => setText(s)}>{s}</button>
+          ))}
+        </div>
+        {error && (
+          <div style={{ padding: "10px 14px", background: "var(--danger-bg)", border: "1px solid var(--danger-border)", borderRadius: 8, color: "var(--danger-text)", fontSize: 12 }}>
+            {error === "anthropic_not_configured"
+              ? "未配置 ANTHROPIC_API_KEY:演示模式下无法运行实时分类。"
+              : `请求失败:${error}`}
+          </div>
+        )}
+        {result && !error && (
+          <div style={{ padding: "14px 16px", background: "var(--vel-indigo-50)", border: "1px solid var(--vel-indigo-100)", borderRadius: 10 }}>
+            <div className="row" style={{ gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+              {matchedRule ? (
+                <>
+                  <span className="pill pill--indigo">规则 #{rules.findIndex(r => r.id === matchedRule.id) + 1}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--fg1)" }}>{matchedRule.intent}</span>
+                  {matchedDept && <span className="pill pill--info">{matchedDept.name}</span>}
+                  {matchedSkill && <span className="pill pill--neutral"><Icon.Sparkles size={10} /> {matchedSkill.name}</span>}
+                  <span className="num" style={{ marginLeft: "auto", fontSize: 11, color: "var(--fg3)" }}>置信度 {(result.confidence * 100).toFixed(0)}%</span>
+                </>
+              ) : (
+                <>
+                  <span className="pill pill--neutral">无匹配规则</span>
+                  <span className="num" style={{ marginLeft: "auto", fontSize: 11, color: "var(--fg3)" }}>置信度 {(result.confidence * 100).toFixed(0)}%</span>
+                </>
+              )}
+            </div>
+            {result.rationale && (
+              <div style={{ fontSize: 12, color: "var(--fg2)", lineHeight: 1.6 }}>
+                <strong style={{ color: "var(--fg1)" }}>分类理由:</strong> {result.rationale}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: "var(--fg4)", marginTop: 6 }}>{result.model}</div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
