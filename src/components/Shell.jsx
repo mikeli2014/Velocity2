@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Icon } from "./primitives.jsx";
 import { Company, Departments, Notifications as SeedNotifications, NOTIFICATION_CATEGORIES } from "../data/seed.js";
-import { useApi } from "../lib/api.js";
+import { useApi, apiFetch } from "../lib/api.js";
 
 const NAV = [
   { id: "home", label: "首页", en: "Home", icon: "Home" },
@@ -98,7 +98,16 @@ export function Sidebar({ route, setRoute }) {
 }
 
 export function Topbar({ route, setRoute }) {
-  const [notifs, setNotifs] = useState(() => SeedNotifications.map(n => ({ ...n })));
+  // Notifications come from /api/v1/notifications with seed fallback.
+  // Mark-read uses POST /api/v1/notifications/{id}/read (or /mark-all-read).
+  const { data: apiNotifs, refresh: refreshNotifs } = useApi("/api/v1/notifications");
+  const baseNotifs = apiNotifs ?? SeedNotifications.map(n => ({ ...n }));
+  const [notifs, setNotifs] = useState(baseNotifs);
+  const lastApiRef = useRef(apiNotifs);
+  if (apiNotifs && apiNotifs !== lastApiRef.current) {
+    lastApiRef.current = apiNotifs;
+    setNotifs(apiNotifs);
+  }
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
   const unread = notifs.filter(n => !n.read).length;
@@ -116,9 +125,15 @@ export function Topbar({ route, setRoute }) {
     setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x));
     setNotifOpen(false);
     if (n.link && setRoute) setRoute(n.link);
+    apiFetch(`/api/v1/notifications/${n.id}/read`, { method: "POST" })
+      .then(() => refreshNotifs())
+      .catch(() => { /* keep optimistic local state */ });
   }
   function markAllRead() {
     setNotifs(prev => prev.map(n => ({ ...n, read: true })));
+    apiFetch("/api/v1/notifications/mark-all-read", { method: "POST" })
+      .then(() => refreshNotifs())
+      .catch(() => { /* keep optimistic local state */ });
   }
 
   const crumbs = useMemo(() => {

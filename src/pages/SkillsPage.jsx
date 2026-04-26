@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Icon, KpiCard, Modal, ConfirmModal, makeId } from "../components/primitives.jsx";
 import { RunDialog } from "../components/RunDialog.jsx";
-import { SkillPacks, SKILL_SCOPES, SKILL_STATUSES, Departments } from "../data/seed.js";
+import { SkillPacks as SeedSkillPacks, SKILL_SCOPES, SKILL_STATUSES, Departments } from "../data/seed.js";
+import { useApi } from "../lib/api.js";
 
 const SKILL_ICONS = ["Search", "Eye", "BarChart", "Sparkles", "GitBranch", "FileText", "Stethoscope", "AlertTriangle", "Workflow", "Cloud", "Lock", "Activity", "Database"];
 
@@ -130,7 +131,16 @@ function SkillEditor({ skill: s, departments, onChange, onClose, onSave }) {
 }
 
 export function SkillsPage() {
-  const [list, setList] = useState(() => SkillPacks.map(s => ({ ...s })));
+  // SkillPacks come from /api/v1/skill-packs with seed fallback. Local
+  // CRUD stays client-side until skill-pack write endpoints land.
+  const { data: apiSkillPacks } = useApi("/api/v1/skill-packs");
+  const baseSkillPacks = apiSkillPacks ?? SeedSkillPacks.map(s => ({ ...s }));
+  const [list, setList] = useState(baseSkillPacks);
+  const lastApiRef = useRef(apiSkillPacks);
+  if (apiSkillPacks && apiSkillPacks !== lastApiRef.current) {
+    lastApiRef.current = apiSkillPacks;
+    setList(apiSkillPacks);
+  }
   const [editing, setEditing] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [running, setRunning] = useState(null);

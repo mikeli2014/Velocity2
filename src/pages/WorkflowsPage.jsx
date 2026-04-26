@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import { Icon, KpiCard, Modal, ConfirmModal, makeId } from "../components/primitives.jsx";
 import { RunDialog } from "../components/RunDialog.jsx";
 import {
   Workflows as SeedWorkflows, WorkflowRuns as SeedWorkflowRuns, WORKFLOW_STATUSES,
   Departments, SkillPacks, KnowledgeDomains
 } from "../data/seed.js";
+import { useApi, apiPost } from "../lib/api.js";
 
 const STEP_ROLES = {
   human:    { label: "人工",   color: "#475569", bg: "#f1f5f9" },
@@ -29,11 +30,29 @@ export function WorkflowsPage() {
   const [running, setRunning] = useState(null);
   const [editing, setEditing] = useState(null);
   const [confirm, setConfirm] = useState(null);
-  const [list, setList] = useState(() => SeedWorkflows.map(w => ({ ...w, steps: w.steps.map(s => ({ ...s })) })));
-  const [runs, setRuns] = useState(() => SeedWorkflowRuns.map(r => ({ ...r })));
+  // Workflows come from /api/v1/workflows; runs come from /api/v1/workflow-runs.
+  // RunDialog completions persist via POST /workflow-runs (apiPost in
+  // persistRun below) — fall through to seed when the API is offline.
+  const { data: apiWorkflows } = useApi("/api/v1/workflows");
+  const baseWorkflows = apiWorkflows ?? SeedWorkflows.map(w => ({ ...w, steps: w.steps.map(s => ({ ...s })) }));
+  const [list, setList] = useState(baseWorkflows);
+  const lastWorkflowsRef = useRef(apiWorkflows);
+  if (apiWorkflows && apiWorkflows !== lastWorkflowsRef.current) {
+    lastWorkflowsRef.current = apiWorkflows;
+    setList(apiWorkflows);
+  }
 
-  function persistRun({ item, input, duration, startedAt }) {
-    setRuns(prev => [{
+  const { data: apiRuns, refresh: refreshRuns } = useApi("/api/v1/workflow-runs");
+  const baseRuns = apiRuns ?? SeedWorkflowRuns.map(r => ({ ...r }));
+  const [runs, setRuns] = useState(baseRuns);
+  const lastRunsRef = useRef(apiRuns);
+  if (apiRuns && apiRuns !== lastRunsRef.current) {
+    lastRunsRef.current = apiRuns;
+    setRuns(apiRuns);
+  }
+
+  async function persistRun({ item, input, duration, startedAt }) {
+    const optimistic = {
       id: `run-${Date.now().toString(36)}`,
       workflowId: item.id,
       trigger: input.trim().slice(0, 60) || "(直接运行)",
@@ -42,7 +61,23 @@ export function WorkflowsPage() {
       duration,
       status: "ok",
       output: `已基于 ${(item.linkedDomains || []).length || "若干"} 条知识完成 ${item.output || "输出"}`
-    }, ...prev]);
+    };
+    // Optimistic prepend so the runs tab updates immediately.
+    setRuns(prev => [optimistic, ...prev]);
+    try {
+      await apiPost("/api/v1/workflow-runs", {
+        workflowId: item.id,
+        trigger: optimistic.trigger,
+        actor: optimistic.actor,
+        started: optimistic.started,
+        duration: optimistic.duration,
+        status: optimistic.status,
+        output: optimistic.output
+      });
+      refreshRuns();
+    } catch (err) {
+      console.warn("[velocity] workflow run POST failed; keeping local-only", err);
+    }
   }
 
   function saveTemplate(next) {

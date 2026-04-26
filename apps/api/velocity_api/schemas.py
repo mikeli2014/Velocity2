@@ -248,6 +248,136 @@ class StrategyQuestionOut(_CamelModel):
     agents: list[str] = Field(default_factory=list)
 
 
+# --- Skills / Workflows / Runs ---------------------------------------
+
+
+class SkillPackOut(_CamelModel):
+    id: str
+    name: str
+    dept: str | None = None
+    maintainer: str | None = None
+    scope: str | None = None
+    status: str | None = None
+    version: str | None = None
+    icon: str | None = None
+    input: str | None = None
+    output: str | None = None
+    uses: int = 0
+    rating: float = 0.0
+    updated: str | None = None
+
+
+class WorkflowOut(_CamelModel):
+    id: str
+    name: str
+    dept_id: str | None = None
+    owner: str | None = None
+    status: str | None = None
+    version: str | None = None
+    icon: str | None = None
+    description: str | None = None
+    input: str | None = None
+    output: str | None = None
+    avg_time: str | None = None
+    uses: int = 0
+    last_run: str | None = None
+    linked_skills: list[str] = Field(default_factory=list)
+    linked_domains: list[str] = Field(default_factory=list)
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class WorkflowRunOut(_CamelModel):
+    id: str
+    workflow_id: str | None = None
+    trigger: str | None = None
+    actor: str | None = None
+    started: str | None = None
+    duration: str | None = None
+    status: str | None = None
+    output: str | None = None
+
+
+class WorkflowRunCreate(_CamelModel):
+    workflow_id: str
+    trigger: str | None = None
+    actor: str | None = None
+    started: str | None = None
+    duration: str | None = None
+    status: str | None = "ok"
+    output: str | None = None
+
+
+# --- Ingest Queue -----------------------------------------------------
+
+
+class IngestQueueItemOut(_CamelModel):
+    id: str
+    name: str
+    type: str | None = None
+    size: str | None = None
+    state: str = "queued"
+    progress: int = 0
+    scope: str | None = None
+    owner: str | None = None
+    uploaded: str | None = None
+    error: str | None = None
+
+
+class IngestQueueCreate(_CamelModel):
+    name: str
+    type: str | None = None
+    size: str | None = None
+    state: str = "queued"
+    progress: int = 0
+    scope: str | None = None
+    owner: str | None = None
+
+
+class IngestQueuePatch(_CamelModel):
+    state: str | None = None
+    progress: int | None = None
+    error: str | None = None
+
+
+# --- Notifications / Routing / Audit ----------------------------------
+
+
+class NotificationOut(_CamelModel):
+    id: str
+    at: str | None = None
+    category: str | None = None
+    read: bool = False
+    title: str
+    body: str | None = None
+    link: dict[str, Any] | None = None
+
+
+class RoutingRuleOut(_CamelModel):
+    id: str
+    priority: str | None = None
+    enabled: bool = True
+    intent: str | None = None
+    target_dept: str | None = None
+    target_skill: str | None = None
+    permission: str | None = None
+    note: str | None = None
+    hits: int = 0
+    last_hit: str | None = None
+
+
+class AuditEventOut(_CamelModel):
+    id: str
+    at: str | None = None
+    actor: str | None = None
+    ip: str | None = None
+    category: str | None = None
+    severity: str | None = None
+    action: str | None = None
+    target: str | None = None
+    scope: str | None = None
+    link: dict[str, Any] | None = None
+
+
 # --- Health ------------------------------------------------------------
 
 

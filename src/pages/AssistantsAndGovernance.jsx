@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import { Icon, KpiCard, HealthPill, Modal, ConfirmModal, makeId } from "../components/primitives.jsx";
-import { Departments, AssistantRoutingRules, ROUTE_PRIORITIES, SkillPacks, AuditLog, AUDIT_CATEGORIES } from "../data/seed.js";
+import { Departments, AssistantRoutingRules as SeedRoutingRules, ROUTE_PRIORITIES, SkillPacks, AuditLog as SeedAuditLog, AUDIT_CATEGORIES } from "../data/seed.js";
+import { useApi } from "../lib/api.js";
 
 const ROLE_OPTIONS = [
   { v: "ceo",   label: "CEO" },
@@ -21,7 +22,16 @@ function cellToCsv(v) {
 }
 
 export function AssistantsPage({ setRoute }) {
-  const [rules, setRules] = useState(() => AssistantRoutingRules.map(r => ({ ...r })));
+  // Routing rules come from /api/v1/routing-rules with seed fallback.
+  // Local CRUD stays client-side until write endpoints land.
+  const { data: apiRules } = useApi("/api/v1/routing-rules");
+  const baseRules = apiRules ?? SeedRoutingRules.map(r => ({ ...r }));
+  const [rules, setRules] = useState(baseRules);
+  const lastApiRef = useRef(apiRules);
+  if (apiRules && apiRules !== lastApiRef.current) {
+    lastApiRef.current = apiRules;
+    setRules(apiRules);
+  }
   const [editing, setEditing] = useState(null);
   const [confirm, setConfirm] = useState(null);
 
@@ -370,6 +380,10 @@ function AuditLogPanel({ setRoute }) {
   const [filterSev, setFilterSev] = useState("all");
   const [search, setSearch] = useState("");
 
+  // Audit events come from /api/v1/audit-log with seed fallback.
+  const { data: apiAudit } = useApi("/api/v1/audit-log");
+  const AuditLog = apiAudit ?? SeedAuditLog;
+
   const filtered = useMemo(() => AuditLog.filter(e => {
     if (filterCat !== "all" && e.category !== filterCat) return false;
     if (filterSev !== "all" && e.severity !== filterSev) return false;
@@ -380,7 +394,7 @@ function AuditLogPanel({ setRoute }) {
         || e.actor.toLowerCase().includes(q);
     }
     return true;
-  }), [filterCat, filterSev, search]);
+  }), [AuditLog, filterCat, filterSev, search]);
 
   const sevMeta = {
     info:   { cls: "pill--info",    label: "info" },

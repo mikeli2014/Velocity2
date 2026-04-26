@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Icon, KpiCard, Progress, HealthPill, Modal } from "../components/primitives.jsx";
-import { Company, KnowledgeSources as SeedKnowledgeSources, KnowledgeDomains, Projects, DecisionsRich, IngestQueueItems, INGEST_STATES } from "../data/seed.js";
+import { Company, KnowledgeSources as SeedKnowledgeSources, KnowledgeDomains as SeedKnowledgeDomains, Projects, DecisionsRich, IngestQueueItems, INGEST_STATES } from "../data/seed.js";
 import { useApi } from "../lib/api.js";
 
 export function KnowledgePage() {
@@ -17,6 +17,9 @@ export function KnowledgePage() {
   const { data: apiSources, loading: sourcesLoading, error: sourcesError } = useApi("/api/v1/knowledge-sources");
   const allSources = apiSources ?? SeedKnowledgeSources;
   const sources = filter === "all" ? allSources : allSources.filter(s => (s.scope || "").includes(filter));
+  // Domains tab also reads from the API.
+  const { data: apiDomains } = useApi("/api/v1/knowledge-domains");
+  const KnowledgeDomains = apiDomains ?? SeedKnowledgeDomains;
 
   function pushIngestItem(it) {
     setIngestItems(prev => [it, ...prev]);
@@ -284,7 +287,7 @@ function KnowledgeUploadFlow({ mode, onClose, onComplete }) {
   const [stage, setStage] = useState(0);
   const [title, setTitle] = useState(mode === "url" ? "https://" : "");
   const [scope, setScope] = useState("公司");
-  const [domain, setDomain] = useState(KnowledgeDomains[0].id);
+  const [domain, setDomain] = useState(SeedKnowledgeDomains[0].id);
   const [running, setRunning] = useState(false);
   const finished = stage >= UPLOAD_STAGES.length;
 
@@ -299,7 +302,7 @@ function KnowledgeUploadFlow({ mode, onClose, onComplete }) {
       else {
         setRunning(false);
         if (onComplete) {
-          const detectedDomain = KnowledgeDomains.find(d => d.id === domain);
+          const detectedDomain = SeedKnowledgeDomains.find(d => d.id === domain);
           // Detect type from filename extension or url
           const lower = title.toLowerCase();
           const t = mode === "url" ? "URL"
@@ -385,7 +388,7 @@ function KnowledgeUploadFlow({ mode, onClose, onComplete }) {
             <div className="field">
               <label className="field__label">归属知识域</label>
               <select className="select" value={domain} onChange={e => setDomain(e.target.value)}>
-                {KnowledgeDomains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                {SeedKnowledgeDomains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
           </div>
@@ -435,7 +438,7 @@ function KnowledgeUploadFlow({ mode, onClose, onComplete }) {
             <div style={{ fontSize: 13, fontWeight: 700, color: "#166534" }}>处理完成 · 已加入知识中心</div>
           </div>
           <div style={{ fontSize: 12, color: "#166534", lineHeight: 1.6 }}>
-            来源 <strong>"{title}"</strong> 已切分为约 96 个向量片段,自动生成 4 个标签,关联到 <strong>{KnowledgeDomains.find(d => d.id === domain)?.name}</strong>。质量状态:待审核。
+            来源 <strong>"{title}"</strong> 已切分为约 96 个向量片段,自动生成 4 个标签,关联到 <strong>{SeedKnowledgeDomains.find(d => d.id === domain)?.name}</strong>。质量状态:待审核。
           </div>
         </div>
       )}
@@ -445,7 +448,7 @@ function KnowledgeUploadFlow({ mode, onClose, onComplete }) {
 
 function KnowledgeGraph() {
   const cx = 360, cy = 220;
-  const domains = KnowledgeDomains.slice(0, 8).map((d, i) => {
+  const domains = SeedKnowledgeDomains.slice(0, 8).map((d, i) => {
     const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
     return { ...d, x: cx + Math.cos(a) * 200, y: cy + Math.sin(a) * 150 };
   });

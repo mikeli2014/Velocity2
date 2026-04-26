@@ -13,7 +13,6 @@ RUN npm ci --no-audit --no-fund
 
 COPY index.html vite.config.js eslint.config.js ./
 COPY src ./src
-COPY tests ./tests
 RUN npm run build
 
 

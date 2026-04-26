@@ -26,7 +26,7 @@ from sqlalchemy import inspect
 
 from . import __version__, models, seed_data
 from .db import SessionLocal, create_all, engine
-from .routes import catalog, knowledge, objectives
+from .routes import automation, catalog, inbox, knowledge, objectives
 from .schemas import HealthOut
 from .settings import settings
 
@@ -122,6 +122,8 @@ def health():
 app.include_router(objectives.router)
 app.include_router(catalog.router)
 app.include_router(knowledge.router)
+app.include_router(automation.router)
+app.include_router(inbox.router)
 
 
 # --- Static SPA fallback ------------------------------------------------

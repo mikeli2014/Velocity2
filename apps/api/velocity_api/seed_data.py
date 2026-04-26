@@ -490,6 +490,179 @@ STRATEGY_QUESTIONS: list[dict[str, Any]] = [
 ]
 
 
+# --- SkillPacks ----------------------------------------------------------
+
+SKILL_PACKS: list[dict[str, Any]] = [
+    {"id": "sp-mat-search",   "name": "供应商/材料/工艺检索", "dept": "industrial-design", "maintainer": "陈思源",        "scope": "cross-dept", "status": "published",  "version": "v2.4.0", "icon": "Search",         "input": "设计需求描述",                "output": "推荐供应商 / 材料 / 工艺 / 参数 / 成本 / 来源",         "uses": 412,  "rating": 4.6, "updated": "2026-04-22"},
+    {"id": "sp-cmf-vision",   "name": "CMF 图片识别",         "dept": "industrial-design", "maintainer": "苏婉",          "scope": "dept",       "status": "published",  "version": "v1.6.2", "icon": "Eye",            "input": "产品图片",                    "output": "色彩 / 材质 / 表面工艺 / CMF 标签",                       "uses": 287,  "rating": 4.4, "updated": "2026-04-15"},
+    {"id": "sp-aow",          "name": "奥维数据分析",          "dept": "industrial-design", "maintainer": "市场部 / 林然", "scope": "company",    "status": "published",  "version": "v3.1.0", "icon": "BarChart",       "input": "Excel / 报告",                "output": "价格带机会 / 竞品规格 / 市场洞察",                       "uses": 134,  "rating": 4.2, "updated": "2026-04-08"},
+    {"id": "sp-trend",        "name": "趋势洞察结构化",        "dept": "industrial-design", "maintainer": "苏婉",          "scope": "dept",       "status": "published",  "version": "v1.2.1", "icon": "Sparkles",       "input": "趋势报告 / 展会照片",         "output": "标签化趋势 / 设计机会 / 知识条目",                       "uses": 98,   "rating": 4.5, "updated": "2026-03-30"},
+    {"id": "sp-cross-cat",    "name": "跨品类关联",            "dept": "industrial-design", "maintainer": "李慕白",        "scope": "cross-dept", "status": "draft",      "version": "v0.8.0", "icon": "GitBranch",      "input": "材料 / 工艺 / 设计问题",      "output": "可迁移机会 / 风险 / 参考案例",                          "uses": 76,   "rating": 4.3, "updated": "2026-04-19"},
+    {"id": "sp-design-brief", "name": "设计简报生成",          "dept": "industrial-design", "maintainer": "李慕白",        "scope": "dept",       "status": "published",  "version": "v2.0.0", "icon": "FileText",       "input": "项目方向 + OKR + 用户画像",   "output": "结构化设计简报 (含 CMF / 工艺约束)",                    "uses": 156,  "rating": 4.7, "updated": "2026-04-21"},
+    {"id": "sp-fault-diag",   "name": "故障诊断助手",          "dept": "service",           "maintainer": "王锐",          "scope": "dept",       "status": "published",  "version": "v1.4.0", "icon": "Stethoscope",    "input": "工单描述 / 故障代码",         "output": "可能原因 / 配件 / SOP 步骤",                            "uses": 1240, "rating": 4.5, "updated": "2026-04-18"},
+    {"id": "sp-price-anomaly","name": "价格异常检测",          "dept": "cop",               "maintainer": "周岚",          "scope": "dept",       "status": "published",  "version": "v1.1.0", "icon": "AlertTriangle",  "input": "城市 / 渠道 / 周期",          "output": "异常 SKU / 偏差幅度 / 处理建议",                        "uses": 88,   "rating": 4.1, "updated": "2026-04-12"},
+    {"id": "sp-doc-search",   "name": "公司文档全局检索",      "dept": "platform",          "maintainer": "IT / 张毅",     "scope": "platform",   "status": "published",  "version": "v4.0.0", "icon": "Search",         "input": "自然语言问题",                 "output": "答案 + 引用来源 + 权限范围内文档",                      "uses": 3204, "rating": 4.6, "updated": "2026-04-23"},
+    {"id": "sp-meeting-notes","name": "会议纪要结构化",        "dept": "platform",          "maintainer": "IT / 张毅",     "scope": "platform",   "status": "published",  "version": "v2.2.0", "icon": "FileText",       "input": "录音 / 转写文本",             "output": "结论 / 决议 / 待办 / 关联 OKR",                          "uses": 1872, "rating": 4.4, "updated": "2026-04-20"},
+]
+
+# --- Workflows + WorkflowRuns -------------------------------------------
+
+WORKFLOWS: list[dict[str, Any]] = [
+    {
+        "id": "wf-design-brief", "name": "创建设计简报", "dept_id": "industrial-design", "owner": "李慕白",
+        "status": "published", "version": "v2.1.0", "icon": "FileText",
+        "description": "把项目方向 + 公司 OKR + 用户画像 + 部门知识结构化成可评审的设计简报。",
+        "input": "项目方向 / 关联 OKR / 用户画像", "output": "结构化设计简报 (含 CMF / 工艺 / 成本约束)",
+        "avg_time": "约 8 分钟", "uses": 64, "last_run": "2 小时前",
+        "linked_skills": ["sp-design-brief", "sp-mat-search"],
+        "linked_domains": ["kd-cmf", "kd-material", "kd-trend"],
+        "steps": [
+            {"id": "s1", "name": "锁定项目方向与目标用户", "role": "human", "time": "1 min"},
+            {"id": "s2", "name": "拉取公司 OKR + 关联项目作为背景", "role": "system", "time": "<5s"},
+            {"id": "s3", "name": "运行 Skill — 供应商/材料/工艺检索", "role": "skill", "skillId": "sp-mat-search", "time": "30s"},
+            {"id": "s4", "name": "运行 Skill — 设计简报生成", "role": "skill", "skillId": "sp-design-brief", "time": "45s"},
+            {"id": "s5", "name": "提交人工评审", "role": "approval", "approver": "设计总监", "time": "1 day"},
+        ],
+    },
+    {
+        "id": "wf-mat-compare", "name": "材料方案对比", "dept_id": "industrial-design", "owner": "陈思源",
+        "status": "published", "version": "v1.4.0", "icon": "GitBranch",
+        "description": "在 2-3 个候选材料 / 工艺间进行成本、性能、可获得性的横向对比并形成推荐。",
+        "input": "候选材料 / 工艺清单 + 设计目标", "output": "对比表 + 推荐结论 + 风险条目",
+        "avg_time": "约 5 分钟", "uses": 38, "last_run": "今早 09:50",
+        "linked_skills": ["sp-mat-search", "sp-cross-cat"],
+        "linked_domains": ["kd-material", "kd-process", "kd-supplier"],
+        "steps": [
+            {"id": "s1", "name": "明确对比维度 (成本/性能/工艺周期)", "role": "human", "time": "2 min"},
+            {"id": "s2", "name": "运行 Skill — 供应商/材料/工艺检索", "role": "skill", "skillId": "sp-mat-search", "time": "30s"},
+            {"id": "s3", "name": "运行 Skill — 跨品类关联", "role": "skill", "skillId": "sp-cross-cat", "time": "45s"},
+            {"id": "s4", "name": "AI 汇总对比表 + 推荐", "role": "ai", "time": "1 min"},
+        ],
+    },
+    {
+        "id": "wf-cmf-feasibility", "name": "CMF 可行性检查", "dept_id": "id-cmf", "owner": "苏婉",
+        "status": "published", "version": "v1.2.0", "icon": "Eye",
+        "description": "上传 CMF 方案,自动核查与已有材料 / 工艺 / 供应商能力的匹配度。",
+        "input": "CMF 方案图 / 工艺规格", "output": "可行性评分 / 替代方案 / 风险清单",
+        "avg_time": "约 12 分钟", "uses": 27, "last_run": "昨天",
+        "linked_skills": ["sp-cmf-vision", "sp-mat-search"],
+        "linked_domains": ["kd-cmf", "kd-material", "kd-process"],
+        "steps": [
+            {"id": "s1", "name": "上传 CMF 方案图", "role": "human", "time": "1 min"},
+            {"id": "s2", "name": "运行 Skill — CMF 图片识别", "role": "skill", "skillId": "sp-cmf-vision", "time": "1 min"},
+            {"id": "s3", "name": "对比中台 CMF 知识域", "role": "system", "time": "10s"},
+            {"id": "s4", "name": "运行 Skill — 供应商/材料/工艺检索", "role": "skill", "skillId": "sp-mat-search", "time": "30s"},
+            {"id": "s5", "name": "AI 输出可行性评分", "role": "ai", "time": "1 min"},
+            {"id": "s6", "name": "CMF 总监评审", "role": "approval", "approver": "苏婉", "time": "1 day"},
+        ],
+    },
+    {
+        "id": "wf-fault-triage", "name": "工单故障归因", "dept_id": "service", "owner": "王锐",
+        "status": "published", "version": "v1.3.0", "icon": "Stethoscope",
+        "description": "把售后工单输入到诊断助手,自动给出可能原因、配件、SOP 和上门优先级。",
+        "input": "工单描述 / 故障代码", "output": "可能原因 / 配件 / SOP / 优先级",
+        "avg_time": "约 2 分钟", "uses": 1240, "last_run": "1 分钟前",
+        "linked_skills": ["sp-fault-diag"], "linked_domains": [],
+        "steps": [
+            {"id": "s1", "name": "技师 / 客服录入工单", "role": "human", "time": "30s"},
+            {"id": "s2", "name": "运行 Skill — 故障诊断助手", "role": "skill", "skillId": "sp-fault-diag", "time": "20s"},
+            {"id": "s3", "name": "AI 给出 SOP 与配件清单", "role": "ai", "time": "30s"},
+            {"id": "s4", "name": "技师确认并派单", "role": "human", "time": "1 min"},
+        ],
+    },
+    {
+        "id": "wf-price-anomaly", "name": "渠道价格异常排查", "dept_id": "cop", "owner": "周岚",
+        "status": "published", "version": "v1.0.0", "icon": "AlertTriangle",
+        "description": "针对城市 + 渠道 + 周期跑一次价格异常检测,生成 SKU 级处理建议。",
+        "input": "城市 / 渠道 / 周期", "output": "异常 SKU / 偏差幅度 / 处理建议",
+        "avg_time": "约 4 分钟", "uses": 88, "last_run": "今早",
+        "linked_skills": ["sp-price-anomaly"], "linked_domains": [],
+        "steps": [
+            {"id": "s1", "name": "选择城市 / 渠道 / 周期", "role": "human", "time": "1 min"},
+            {"id": "s2", "name": "运行 Skill — 价格异常检测", "role": "skill", "skillId": "sp-price-anomaly", "time": "20s"},
+            {"id": "s3", "name": "AI 生成 SKU 级处理建议", "role": "ai", "time": "1 min"},
+            {"id": "s4", "name": "渠道经理确认", "role": "approval", "approver": "周岚", "time": "1 hour"},
+        ],
+    },
+    {
+        "id": "wf-meeting-notes", "name": "会议纪要结构化", "dept_id": "platform", "owner": "IT / 张毅",
+        "status": "published", "version": "v2.2.0", "icon": "FileText",
+        "description": "把录音 / 转写文本拆解成结论 / 决议 / 待办,并自动关联到 OKR 与项目。",
+        "input": "录音 / 转写文本", "output": "结论 / 决议 / 待办 / 关联 OKR",
+        "avg_time": "约 3 分钟", "uses": 1872, "last_run": "10 分钟前",
+        "linked_skills": ["sp-meeting-notes"], "linked_domains": [],
+        "steps": [
+            {"id": "s1", "name": "上传录音或文本", "role": "human", "time": "30s"},
+            {"id": "s2", "name": "运行 Skill — 会议纪要结构化", "role": "skill", "skillId": "sp-meeting-notes", "time": "1 min"},
+            {"id": "s3", "name": "AI 自动关联到 OKR / 项目", "role": "ai", "time": "30s"},
+        ],
+    },
+]
+
+WORKFLOW_RUNS: list[dict[str, Any]] = [
+    {"id": "run-1", "workflow_id": "wf-fault-triage",     "trigger": "工单 #SR-20260425-9821",   "actor": "客服 · 林楠",         "started": "10:42", "duration": "1m 38s",  "status": "ok",      "output": "推荐 SOP-FW-008 + 配件 PN-2241"},
+    {"id": "run-2", "workflow_id": "wf-design-brief",     "trigger": "项目 — 全屋净水 2.0",       "actor": "李慕白",              "started": "10:18", "duration": "7m 02s",  "status": "ok",      "output": "已生成 8 页结构化简报"},
+    {"id": "run-3", "workflow_id": "wf-cmf-feasibility",  "trigger": "项目 — 9 大品类 CMF",       "actor": "苏婉",                "started": "09:55", "duration": "11m 24s", "status": "approval","output": "等待 CMF 总监评审"},
+    {"id": "run-4", "workflow_id": "wf-meeting-notes",    "trigger": "FY26 季度战略会",           "actor": "陈志远 · 战略办",     "started": "09:32", "duration": "2m 41s",  "status": "ok",      "output": "12 条决议 / 8 条待办 · 已链接 O1 / O2"},
+    {"id": "run-5", "workflow_id": "wf-price-anomaly",    "trigger": "上海地区 · 4 月",           "actor": "周岚",                "started": "09:10", "duration": "3m 18s",  "status": "warn",    "output": "11 个 SKU 偏差 > 8%"},
+    {"id": "run-6", "workflow_id": "wf-mat-compare",      "trigger": "X 系列外壳",                 "actor": "孙阳",                "started": "08:45", "duration": "5m 04s",  "status": "ok",      "output": "推荐 PVD-Black,综合分 8.6/10"},
+]
+
+# --- IngestQueue --------------------------------------------------------
+
+INGEST_QUEUE: list[dict[str, Any]] = [
+    {"id": "iq-1", "name": "Q1 财务月度复盘.pptx",       "type": "PPT", "size": "8.4MB", "state": "parsing",   "progress": 62,  "scope": "财务",     "owner": "Joyce 黄", "uploaded": "10 分钟前", "error": None},
+    {"id": "iq-2", "name": "竞品 G3 发布会要点.docx",    "type": "DOC", "size": "1.6MB", "state": "embedding", "progress": 88,  "scope": "工业设计", "owner": "苏婉",      "uploaded": "18 分钟前", "error": None},
+    {"id": "iq-3", "name": "城运 BP/SC 培训纪要.txt",    "type": "TXT", "size": "240KB","state": "tagging",   "progress": 41,  "scope": "渠道运营", "owner": "汪洋",      "uploaded": "23 分钟前", "error": None},
+    {"id": "iq-4", "name": "市场调研问卷 Apr.xlsx",      "type": "XLSX","size": "12.4MB","state": "queued",   "progress": 0,   "scope": "市场部",   "owner": "Anna 林",   "uploaded": "32 分钟前", "error": None},
+    {"id": "iq-5", "name": "https://aowei.com/report/2026q1", "type": "URL", "size": "—", "state": "fetching", "progress": 18, "scope": "公司",     "owner": "战略办",    "uploaded": "38 分钟前", "error": None},
+    {"id": "iq-6", "name": "供应商资质年检 2026.zip",    "type": "ZIP", "size": "184MB","state": "review",    "progress": 100, "scope": "供应链",   "owner": "宋平",      "uploaded": "1 小时前",  "error": None},
+    {"id": "iq-7", "name": "县域服务试点 二期数据.xlsx",  "type": "XLSX","size": "6.2MB","state": "review",    "progress": 100, "scope": "服务部",   "owner": "高翔",      "uploaded": "2 小时前",  "error": None},
+    {"id": "iq-8", "name": "外部供应商图集 (未鉴权).rar", "type": "RAR", "size": "—",   "state": "failed",    "progress": 14,  "scope": "—",        "owner": "陈思源",    "uploaded": "3 小时前",  "error": "压缩包加密 — 无法解析"},
+]
+
+# --- Notifications ------------------------------------------------------
+
+NOTIFICATIONS: list[dict[str, Any]] = [
+    {"id": "n-1", "at": "12 分钟前", "category": "project",   "read": False, "title": "全屋净水 2.0 — 局改方案产品化",                  "body": "李慕白 更新了项目进度到 64%,新增 1 个里程碑事件。", "link": {"page": "okr"}},
+    {"id": "n-2", "at": "1 小时前",  "category": "assistant", "read": False, "title": "🦞 小龙虾助手 完成 8 个工业设计部检索",          "body": "今日为 78 名设计师回答 412 次问询,平均命中率 91%。", "link": {"page": "department", "deptId": "industrial-design"}},
+    {"id": "n-3", "at": "2 小时前",  "category": "risk",      "read": False, "title": "BP/SC/SA 三角协同 200 城落地 · 新增风险",        "body": "周岚 标注 1 项风险:线上线下同价覆盖率较目标低 14pt。", "link": {"page": "okr"}},
+    {"id": "n-4", "at": "今早 09:24","category": "strategy",  "read": True,  "title": "战略画布完成第 3 轮多智能体研讨",                "body": "FY26 是否加大线上 DTC 渠道投入? 7 个 Agent 中 3 赞成 / 1 反对 / 3 保留。", "link": {"page": "strategy"}},
+    {"id": "n-5", "at": "今早 08:50","category": "knowledge", "read": True,  "title": "苏婉 上传 38 条 CMF 知识条目",                   "body": "等待 CMF 中台审核;命中后将进入 1,046 条 CMF 知识域。", "link": {"page": "knowledge"}},
+    {"id": "n-6", "at": "昨天",      "category": "audit",     "read": True,  "title": "外部 IP 拦截事件",                                "body": "203.0.113.42 尝试以 cop@partner 身份登录,被风控拦截。", "link": {"page": "governance"}},
+]
+
+# --- RoutingRules -------------------------------------------------------
+
+ROUTING_RULES: list[dict[str, Any]] = [
+    {"id": "rt-1", "priority": "high",   "enabled": True,  "intent": "CMF / 材料 / 工艺 / 色彩 / 表面",       "target_dept": "industrial-design", "target_skill": "sp-mat-search",     "permission": "vp,lead,staff", "note": "工业设计部高频问询。命中后自动注入 CMF 与材料知识域。", "hits": 412,  "last_hit": "12 分钟前"},
+    {"id": "rt-2", "priority": "high",   "enabled": True,  "intent": "竞品 / 奥维 / 价格带 / 品类报告",        "target_dept": "industrial-design", "target_skill": "sp-aow",            "permission": "vp,lead,staff", "note": "奥维品类问询统一走奥维分析技能,数据出处可追溯。",     "hits": 134,  "last_hit": "1 小时前"},
+    {"id": "rt-3", "priority": "high",   "enabled": True,  "intent": "工单 / 故障 / 投诉 / 维修",              "target_dept": "service",           "target_skill": "sp-fault-diag",     "permission": "lead,staff",    "note": "服务部一线 SOP — 命中后追加车型/故障代码槽位提取。",    "hits": 1240, "last_hit": "1 分钟前"},
+    {"id": "rt-4", "priority": "medium", "enabled": True,  "intent": "渠道 / BP / SC / SA / 价格异常 / 同价",  "target_dept": "cop",               "target_skill": "sp-price-anomaly",  "permission": "vp,lead",       "note": "渠道运营专属。仅 VP / 团队负责人可触发,避免一线误判。", "hits": 88,   "last_hit": "今早"},
+    {"id": "rt-5", "priority": "medium", "enabled": True,  "intent": "战略 / 决策 / OKR / 关键项目 / 反对意见", "target_dept": "platform",          "target_skill": "sp-doc-search",     "permission": "ceo,vp",        "note": "战略级问题统一走战略助手 + 全局文档检索。",            "hits": 264,  "last_hit": "今早 09:24"},
+    {"id": "rt-6", "priority": "medium", "enabled": True,  "intent": "会议 / 纪要 / 录音 / 转写",              "target_dept": "platform",          "target_skill": "sp-meeting-notes",  "permission": "vp,lead,staff", "note": "全员可用。Skill Pack 自动关联到 OKR 与项目。",          "hits": 1872, "last_hit": "10 分钟前"},
+    {"id": "rt-7", "priority": "low",    "enabled": False, "intent": "动销 / 库存 / 补货 / 备货",              "target_dept": "supply-chain",      "target_skill": None,                "permission": "vp,lead",       "note": "供应链 Skill 仍在草稿,规则暂关。命中走默认部门助手。", "hits": 12,   "last_hit": "—"},
+    {"id": "rt-8", "priority": "low",    "enabled": True,  "intent": "默认 (Fallback)",                        "target_dept": "platform",          "target_skill": "sp-doc-search",     "permission": "ceo,vp,lead,staff", "note": "未命中其他规则 — 走全公司文档检索 + 默认部门助手。", "hits": 3204, "last_hit": "刚刚"},
+]
+
+# --- AuditEvents --------------------------------------------------------
+
+AUDIT_EVENTS: list[dict[str, Any]] = [
+    {"id": "au-1",  "at": "2026-04-26 11:42", "actor": "苏婉",       "ip": "10.20.32.18",  "category": "knowledge", "severity": "info",   "action": "上传 38 条 CMF 知识条目",                "target": "知识域 · CMF (色彩材质工艺)", "scope": "工业设计部",  "link": {"page": "knowledge"}},
+    {"id": "au-2",  "at": "2026-04-26 11:18", "actor": "李慕白",     "ip": "10.20.32.41",  "category": "okr",       "severity": "info",   "action": "运行 Skill — 设计简报生成",              "target": "项目 · 全屋净水 2.0",         "scope": "工业设计部",  "link": {"page": "okr"}},
+    {"id": "au-3",  "at": "2026-04-26 10:55", "actor": "苏婉",       "ip": "10.20.32.18",  "category": "skill",     "severity": "warn",   "action": "工作流 CMF 可行性检查 进入审批等待",     "target": "工作流 · CMF 可行性检查",      "scope": "CMF 中台",   "link": {"page": "workflows"}},
+    {"id": "au-4",  "at": "2026-04-26 09:40", "actor": "周岚",       "ip": "10.40.55.7",   "category": "assistant", "severity": "info",   "action": "更新意图路由规则",                       "target": "规则 · 渠道 / 价格异常",       "scope": "渠道运营 (COP)", "link": {"page": "assistants"}},
+    {"id": "au-5",  "at": "2026-04-26 09:24", "actor": "战略画布",   "ip": "—",            "category": "assistant", "severity": "info",   "action": "完成第 3 轮多智能体研讨",                "target": "战略问题 · DTC 渠道",          "scope": "公司",       "link": {"page": "strategy"}},
+    {"id": "au-6",  "at": "2026-04-26 09:10", "actor": "陈思源",     "ip": "10.20.32.62",  "category": "knowledge", "severity": "info",   "action": "标记一条 PVD 工艺答案为 不准确",         "target": "知识域 · 工艺",                "scope": "工业设计部",  "link": {"page": "knowledge"}},
+    {"id": "au-7",  "at": "2026-04-26 08:50", "actor": "Tomas 朱",   "ip": "10.10.4.2",    "category": "config",    "severity": "warn",   "action": "下线模型 文心 4 Turbo (灾备)",            "target": "模型 · ernie-4-turbo",         "scope": "公司",       "link": {"page": "admin"}},
+    {"id": "au-8",  "at": "2026-04-26 08:15", "actor": "Joyce 黄",   "ip": "10.30.10.14",  "category": "model",     "severity": "info",   "action": "切换 财务 / HR / 法务 走本地 LLaMA-70B", "target": "路由策略 · 敏感数据",         "scope": "公司",       "link": {"page": "admin"}},
+    {"id": "au-9",  "at": "2026-04-25 22:40", "actor": "高翔",       "ip": "10.40.55.18",  "category": "okr",       "severity": "warn",   "action": "新增风险条目",                            "target": "项目 · 县域服务网络重塑",     "scope": "服务部 / 县域", "link": {"page": "okr"}},
+    {"id": "au-10", "at": "2026-04-25 18:02", "actor": "陈志远",     "ip": "10.10.1.1",    "category": "auth",      "severity": "info",   "action": "登录 (SSO · 企业微信)",                   "target": "—",                            "scope": "公司",       "link": None},
+    {"id": "au-11", "at": "2026-04-25 16:48", "actor": "未知",       "ip": "203.0.113.42", "category": "auth",      "severity": "danger", "action": "外部 IP 尝试以 cop@partner 身份登录,被拦截", "target": "—",                          "scope": "外部",       "link": None},
+    {"id": "au-12", "at": "2026-04-25 15:30", "actor": "黄毅",       "ip": "10.10.4.21",   "category": "config",    "severity": "info",   "action": "工业设计部 助手 上线全员",                 "target": "部门 · 工业设计 / 小龙虾",    "scope": "公司",       "link": {"page": "department", "deptId": "industrial-design"}},
+]
+
+
 # --- Loader --------------------------------------------------------------
 
 
@@ -503,7 +676,9 @@ def load_seed(db) -> dict[str, int]:
 
     inserted = {"company": 0, "departments": 0, "objectives": 0, "key_results": 0,
                 "projects": 0, "decisions": 0, "knowledge_domains": 0, "knowledge_sources": 0,
-                "activity": 0, "agents": 0, "strategy_questions": 0}
+                "activity": 0, "agents": 0, "strategy_questions": 0,
+                "skill_packs": 0, "workflows": 0, "workflow_runs": 0,
+                "ingest_queue": 0, "notifications": 0, "routing_rules": 0, "audit_events": 0}
 
     if db.get(models.Company, COMPANY["id"]) is None:
         db.add(models.Company(**COMPANY))
@@ -560,6 +735,41 @@ def load_seed(db) -> dict[str, int]:
         if db.get(models.StrategyQuestion, sq["id"]) is None:
             db.add(models.StrategyQuestion(**sq))
             inserted["strategy_questions"] += 1
+
+    for sp in SKILL_PACKS:
+        if db.get(models.SkillPack, sp["id"]) is None:
+            db.add(models.SkillPack(**sp))
+            inserted["skill_packs"] += 1
+
+    for wf in WORKFLOWS:
+        if db.get(models.Workflow, wf["id"]) is None:
+            db.add(models.Workflow(**wf))
+            inserted["workflows"] += 1
+
+    for wr in WORKFLOW_RUNS:
+        if db.get(models.WorkflowRun, wr["id"]) is None:
+            db.add(models.WorkflowRun(**wr))
+            inserted["workflow_runs"] += 1
+
+    for iq in INGEST_QUEUE:
+        if db.get(models.IngestQueueItem, iq["id"]) is None:
+            db.add(models.IngestQueueItem(**iq))
+            inserted["ingest_queue"] += 1
+
+    for n in NOTIFICATIONS:
+        if db.get(models.Notification, n["id"]) is None:
+            db.add(models.Notification(**n))
+            inserted["notifications"] += 1
+
+    for rt in ROUTING_RULES:
+        if db.get(models.RoutingRule, rt["id"]) is None:
+            db.add(models.RoutingRule(**rt))
+            inserted["routing_rules"] += 1
+
+    for au in AUDIT_EVENTS:
+        if db.get(models.AuditEvent, au["id"]) is None:
+            db.add(models.AuditEvent(**au))
+            inserted["audit_events"] += 1
 
     db.commit()
     return inserted

@@ -263,3 +263,123 @@ class StrategyQuestion(Base):
     context: Mapped[list[str]] = mapped_column(JSON, default=list)   # source IDs
     okrs: Mapped[list[str]] = mapped_column(JSON, default=list)       # objective codes
     agents: Mapped[list[str]] = mapped_column(JSON, default=list)     # agent IDs
+
+
+# --- Skills / Workflows / Runs ----------------------------------------
+
+
+class SkillPack(Base):
+    __tablename__ = "skill_packs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    dept: Mapped[str | None] = mapped_column(String, nullable=True)  # dept id or "platform"
+    maintainer: Mapped[str | None] = mapped_column(String, nullable=True)
+    scope: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str | None] = mapped_column(String, nullable=True)
+    version: Mapped[str | None] = mapped_column(String, nullable=True)
+    icon: Mapped[str | None] = mapped_column(String, nullable=True)
+    input: Mapped[str | None] = mapped_column(Text, nullable=True)
+    output: Mapped[str | None] = mapped_column(Text, nullable=True)
+    uses: Mapped[int] = mapped_column(default=0)
+    rating: Mapped[float] = mapped_column(default=0.0)
+    updated: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class Workflow(Base):
+    __tablename__ = "workflows"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    dept_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    owner: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str | None] = mapped_column(String, nullable=True)
+    version: Mapped[str | None] = mapped_column(String, nullable=True)
+    icon: Mapped[str | None] = mapped_column(String, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    input: Mapped[str | None] = mapped_column(Text, nullable=True)
+    output: Mapped[str | None] = mapped_column(Text, nullable=True)
+    avg_time: Mapped[str | None] = mapped_column(String, nullable=True)
+    uses: Mapped[int] = mapped_column(default=0)
+    last_run: Mapped[str | None] = mapped_column(String, nullable=True)
+    linked_skills: Mapped[list[str]] = mapped_column(JSON, default=list)
+    linked_domains: Mapped[list[str]] = mapped_column(JSON, default=list)
+    steps: Mapped[list[dict]] = mapped_column(JSON, default=list)
+
+
+class WorkflowRun(Base):
+    __tablename__ = "workflow_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workflow_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    trigger: Mapped[str | None] = mapped_column(String, nullable=True)
+    actor: Mapped[str | None] = mapped_column(String, nullable=True)
+    started: Mapped[str | None] = mapped_column(String, nullable=True)
+    duration: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str | None] = mapped_column(String, nullable=True)
+    output: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+# --- Ingest Queue -----------------------------------------------------
+
+
+class IngestQueueItem(Base):
+    """Knowledge upload pipeline staging area."""
+
+    __tablename__ = "ingest_queue"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    type: Mapped[str | None] = mapped_column(String, nullable=True)
+    size: Mapped[str | None] = mapped_column(String, nullable=True)
+    state: Mapped[str] = mapped_column(String, default="queued")
+    progress: Mapped[int] = mapped_column(default=0)
+    scope: Mapped[str | None] = mapped_column(String, nullable=True)
+    owner: Mapped[str | None] = mapped_column(String, nullable=True)
+    uploaded: Mapped[str | None] = mapped_column(String, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+# --- Notifications / Routing rules / Audit log ------------------------
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    at: Mapped[str | None] = mapped_column(String, nullable=True)
+    category: Mapped[str | None] = mapped_column(String, nullable=True)
+    read: Mapped[bool] = mapped_column(default=False)
+    title: Mapped[str] = mapped_column(String)
+    body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    link: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class RoutingRule(Base):
+    __tablename__ = "routing_rules"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    priority: Mapped[str | None] = mapped_column(String, nullable=True)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    intent: Mapped[str | None] = mapped_column(String, nullable=True)
+    target_dept: Mapped[str | None] = mapped_column(String, nullable=True)
+    target_skill: Mapped[str | None] = mapped_column(String, nullable=True)
+    permission: Mapped[str | None] = mapped_column(String, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hits: Mapped[int] = mapped_column(default=0)
+    last_hit: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    at: Mapped[str | None] = mapped_column(String, nullable=True)
+    actor: Mapped[str | None] = mapped_column(String, nullable=True)
+    ip: Mapped[str | None] = mapped_column(String, nullable=True)
+    category: Mapped[str | None] = mapped_column(String, nullable=True)
+    severity: Mapped[str | None] = mapped_column(String, nullable=True)
+    action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    target: Mapped[str | None] = mapped_column(String, nullable=True)
+    scope: Mapped[str | None] = mapped_column(String, nullable=True)
+    link: Mapped[dict | None] = mapped_column(JSON, nullable=True)
