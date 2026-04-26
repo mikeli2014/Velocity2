@@ -1,0 +1,227 @@
+/* ============================================================
+   AGHome Design System — colors_and_type.css
+   Core tokens for the A.O. Smith consumer portal (AGHome brand).
+   Pulled from apps/field-app/tailwind.config.js and inline usage
+   across ConsumerPortal / ConsumerSmartHome / ConsumerServiceBooking.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  /* ---------- Brand Core ---------- */
+  --aos-green:        #0D7A3F;   /* Official A.O. Smith green */
+  --aos-green-dark:   #006130;
+  --aos-green-50:     #ECFDF5;
+  --aos-green-100:    #D1FAE5;
+  --aos-green-400:    #34D399;
+  --aos-green-500:    #10B981;
+
+  --aos-gray:         #231F20;   /* Corporate dark gray / primary text */
+  --aos-gray-light:   #F3F4F6;   /* Neutral background */
+
+  /* ---------- Consumer Portal Accents (observed usage) ---------- */
+  --indigo-50:        #EEF2FF;
+  --indigo-100:       #E0E7FF;
+  --indigo-500:       #6366F1;
+  --indigo-600:       #4F46E5;   /* Primary CTA for consumer portal */
+  --indigo-700:       #4338CA;
+  --purple-600:       #9333EA;   /* AI consultant gradient pair */
+
+  /* Category icon colors */
+  --cat-water:        #2563EB;   /* blue-600 — water/purifier */
+  --cat-heat:         #F59E0B;   /* amber-500 — water heater/flame */
+  --cat-air:          #10B981;   /* emerald-500 — air */
+  --cat-bath:         #0EA5E9;   /* sky-500 — bathroom */
+  --cat-kitchen:      #EA580C;   /* orange-600 — kitchen */
+  --cat-laundry:      #8B5CF6;   /* violet-500 — laundry */
+
+  /* ---------- Semantic State ---------- */
+  --success:          #10B981;
+  --success-bg:       #D1FAE5;
+  --success-text:     #065F46;
+  --warning:          #F59E0B;
+  --warning-bg:       #FEF3C7;
+  --warning-text:     #92400E;
+  --danger:           #E11D48;
+  --danger-bg:        #FFE4E6;
+  --danger-text:      #9F1239;
+  --info:             #2563EB;
+  --info-bg:          #DBEAFE;
+  --info-text:        #1E40AF;
+
+  --wechat-green:     #07C160;   /* WeCom / WeChat OAuth button */
+  --wechat-green-dark:#06AD56;
+
+  /* ---------- Neutral Scale (slate, the workhorse) ---------- */
+  --slate-50:         #F8FAFC;   /* page bg */
+  --slate-100:        #F1F5F9;
+  --slate-200:        #E2E8F0;
+  --slate-300:        #CBD5E1;
+  --slate-400:        #94A3B8;
+  --slate-500:        #64748B;   /* body text secondary */
+  --slate-600:        #475569;
+  --slate-700:        #334155;
+  --slate-800:        #1E293B;   /* headings */
+  --slate-900:        #0F172A;   /* dark mode bg / smart-home dashboards */
+
+  /* ---------- Semantic foreground / background aliases ---------- */
+  --fg1:              var(--slate-800);   /* headings, strong labels */
+  --fg2:              var(--slate-600);   /* body */
+  --fg3:              var(--slate-500);   /* captions, metadata */
+  --fg4:              var(--slate-400);   /* icons, disabled */
+  --fg-on-dark:       #FFFFFF;
+  --fg-on-dark-muted: rgba(255,255,255,0.7);
+
+  --bg-page:          var(--slate-50);
+  --bg-surface:       #FFFFFF;
+  --bg-surface-muted: var(--slate-50);
+  --bg-dark:          var(--slate-900);
+  --bg-dark-alt:      var(--slate-800);
+
+  --border:           var(--slate-200);
+  --border-soft:      var(--slate-100);
+  --border-strong:    var(--slate-300);
+
+  /* ---------- Radius ---------- */
+  --radius-xs:   4px;   /* tags, dense inline badges */
+  --radius-sm:   8px;   /* small buttons, inputs */
+  --radius-md:   12px;  /* standard buttons, cards-sm */
+  --radius-lg:   16px;  /* primary cards, tiles */
+  --radius-xl:   20px;  /* feature cards */
+  --radius-2xl:  24px;  /* hero cards, header rounded bottom */
+  --radius-3xl:  32px;  /* smart-home telemetry cards */
+  --radius-pill: 9999px;
+
+  /* ---------- Shadow System ---------- */
+  --shadow-xs:    0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm:    0 2px 6px rgba(0, 0, 0, 0.04);
+  --shadow-card:  0 4px 20px rgba(0, 0, 0, 0.05);          /* default card */
+  --shadow-md:    0 8px 30px rgba(0, 0, 0, 0.04);          /* portal sections */
+  --shadow-lg:    0 10px 30px rgba(13, 122, 63, 0.20);     /* aos-green float */
+  --shadow-indigo:0 10px 30px rgba(79, 70, 229, 0.20);     /* indigo CTA float */
+  --shadow-xl:    0 20px 50px -10px rgba(0, 0, 0, 0.15);
+  --shadow-inset: inset 0 1px 0 rgba(255,255,255,0.05);
+  --shadow-nav-top: 0 -4px 25px -5px rgba(0, 0, 0, 0.05);  /* bottom nav */
+
+  /* Glow (dark-mode smart-home telemetry) */
+  --glow-emerald: 0 0 15px rgba(16,185,129,0.25);
+  --glow-indigo:  0 0 15px rgba(99,102,241,0.25);
+  --glow-rose:    0 0 15px rgba(225,29,72,0.20);
+
+  /* ---------- Spacing (8px base) ---------- */
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  20px;
+  --s-6:  24px;
+  --s-8:  32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  /* ---------- Typography Foundations ---------- */
+  --font-sans:  'Inter', 'Noto Sans SC', ui-sans-serif, system-ui, -apple-system,
+                'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
+  --font-cn:    'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei',
+                'Hiragino Sans GB', var(--font-sans);
+  --font-mono:  'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace;
+
+  --fw-light:    300;
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+  --fw-extra:    800;
+  --fw-black:    900;
+
+  /* Type scale (mobile-first; consumer portal is WeChat H5/mini-program) */
+  --t-nano:      10px;   /* micro-tags inside badges */
+  --t-micro:     11px;
+  --t-caption:   12px;   /* metadata, timestamps */
+  --t-small:     13px;
+  --t-body:      14px;   /* default body */
+  --t-base:      16px;   /* reading body, buttons */
+  --t-lg:        18px;   /* card titles */
+  --t-xl:        20px;   /* section H */
+  --t-2xl:       24px;   /* page H1 mobile */
+  --t-3xl:       30px;
+  --t-4xl:       36px;
+  --t-5xl:       48px;
+
+  /* Line heights */
+  --lh-tight:   1.15;
+  --lh-snug:    1.3;
+  --lh-normal:  1.5;
+  --lh-relaxed: 1.65;
+
+  /* Tracking */
+  --tr-tight:    -0.02em;
+  --tr-normal:   0;
+  --tr-wide:     0.04em;
+  --tr-wider:    0.1em;    /* section eyebrows */
+}
+
+/* ------------------------------------------------------------
+   Base resets + semantic element styles
+   ------------------------------------------------------------ */
+html { font-family: var(--font-sans); color: var(--fg1); background: var(--bg-page); }
+body { font-family: var(--font-sans); font-size: var(--t-body); line-height: var(--lh-normal); color: var(--fg2); -webkit-font-smoothing: antialiased; }
+
+h1, .h1 {
+  font-family: var(--font-sans);
+  font-size: var(--t-2xl);
+  font-weight: var(--fw-black);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tight);
+  color: var(--fg1);
+}
+h2, .h2 {
+  font-size: var(--t-xl);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
+  color: var(--fg1);
+}
+h3, .h3 {
+  font-size: var(--t-lg);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
+  color: var(--fg1);
+}
+h4, .h4 {
+  font-size: var(--t-base);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-snug);
+  color: var(--fg1);
+}
+
+p { font-size: var(--t-body); color: var(--fg2); line-height: var(--lh-normal); }
+small, .caption { font-size: var(--t-caption); color: var(--fg3); }
+
+.eyebrow {
+  font-size: var(--t-micro);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tr-wider);
+  text-transform: uppercase;
+  color: var(--aos-green);
+}
+
+.mono, code, pre { font-family: var(--font-mono); }
+
+/* ------------------------------------------------------------
+   Utility classes used by preview cards (kept minimal)
+   ------------------------------------------------------------ */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.swatch {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+}
