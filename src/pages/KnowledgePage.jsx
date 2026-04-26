@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Icon, KpiCard, Progress, HealthPill, Modal } from "../components/primitives.jsx";
-import { Company, KnowledgeSources, KnowledgeDomains, Projects, DecisionsRich, IngestQueueItems, INGEST_STATES } from "../data/seed.js";
+import { Company, KnowledgeSources as SeedKnowledgeSources, KnowledgeDomains, Projects, DecisionsRich, IngestQueueItems, INGEST_STATES } from "../data/seed.js";
+import { useApi } from "../lib/api.js";
 
 export function KnowledgePage() {
   const [tab, setTab] = useState("sources");
@@ -8,7 +9,14 @@ export function KnowledgePage() {
   const [viewing, setViewing] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [ingestItems, setIngestItems] = useState(() => IngestQueueItems.map(it => ({ ...it })));
-  const sources = filter === "all" ? KnowledgeSources : KnowledgeSources.filter(s => s.scope.includes(filter));
+
+  // Phase 2 step 1: knowledge sources come from the FastAPI backend.
+  // When the API isn't reachable (dev without backend running, or initial
+  // CI runs against a cold deploy) we fall back to the bundled seed so
+  // the rest of the page keeps working.
+  const { data: apiSources, loading: sourcesLoading, error: sourcesError } = useApi("/api/v1/knowledge-sources");
+  const allSources = apiSources ?? SeedKnowledgeSources;
+  const sources = filter === "all" ? allSources : allSources.filter(s => (s.scope || "").includes(filter));
 
   function pushIngestItem(it) {
     setIngestItems(prev => [it, ...prev]);
@@ -42,7 +50,7 @@ export function KnowledgePage() {
 
       <div className="tabs">
         {[
-          { id: "sources", label: "知识来源", count: KnowledgeSources.length },
+          { id: "sources", label: "知识来源", count: allSources.length },
           { id: "domains", label: "知识域", count: KnowledgeDomains.length },
           { id: "graph", label: "知识图谱" },
           { id: "ingest", label: "采集队列", count: 6 },
@@ -63,6 +71,7 @@ export function KnowledgePage() {
                   {f === "all" ? "全部" : f}
                 </button>
               ))}
+              <SourcesDataState loading={sourcesLoading && !apiSources} error={sourcesError} />
             </div>
             <div className="row" style={{ gap: 8 }}>
               <button className="btn btn--ghost btn--sm"><Icon.Filter size={13} /> 筛选</button>
@@ -576,5 +585,31 @@ function FeedbackPanel() {
         </div>
       ))}
     </div>
+  );
+}
+
+function SourcesDataState({ loading, error }) {
+  if (loading) {
+    return (
+      <span className="pill pill--neutral" title="正在从后端加载">
+        <Icon.RefreshCw size={11} style={{ animation: "spin 1.2s linear infinite" }} />
+        加载中…
+      </span>
+    );
+  }
+  if (error) {
+    return (
+      <span
+        className="pill pill--warn"
+        title={`API 调用失败:${error.message}\n已回退到本地 seed.js 数据。`}
+      >
+        <Icon.AlertTriangle size={11} /> 离线模式 (seed)
+      </span>
+    );
+  }
+  return (
+    <span className="pill pill--ok" title="数据来自 /api/v1/knowledge-sources">
+      <Icon.Cloud size={11} /> 已连接 API
+    </span>
   );
 }
