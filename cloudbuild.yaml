@@ -38,6 +38,17 @@ steps:
     waitFor: ["build"]
 
   # 3. Deploy to Cloud Run
+  #
+  # The AI endpoints (/api/v1/chat, /api/v1/strategy-questions/{id}/debate,
+  # /api/v1/route) all soft-fall to 503 anthropic_not_configured when no
+  # API key is set, and the frontend handles that gracefully. To enable
+  # real Anthropic calls in a deploy, attach a secret OUT OF BAND:
+  #
+  #   gcloud run services update ${_SERVICE} \
+  #     --region=${_REGION} \
+  #     --update-secrets=ANTHROPIC_API_KEY=anthropic-api-key:latest
+  #
+  # Don't bake the key into this YAML — it's checked into git.
   - id: deploy
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud

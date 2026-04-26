@@ -74,4 +74,45 @@ test.describe("Velocity OS — API integration", () => {
     // SourcesDataState shows 已连接 API when /api/v1/knowledge-sources resolves.
     await expect(page.getByText("已连接 API")).toBeVisible({ timeout: 10_000 });
   });
+
+  test("/api/v1/strategy-questions/sq-1/debate returns the seeded transcript", async ({ request }) => {
+    const res = await request.get("/api/v1/strategy-questions/sq-1/debate");
+    expect(res.status()).toBe(200);
+    const rows = await res.json();
+    // Seed has 7 messages on sq-1 across rounds 1-3.
+    expect(rows.length).toBe(7);
+    const rounds = [...new Set(rows.map(r => r.round))].sort();
+    expect(rounds).toEqual([1, 2, 3]);
+    expect(rows[0]).toHaveProperty("agentId");
+    expect(rows[0]).toHaveProperty("stance");
+  });
+
+  test("/api/v1/chat without a key surfaces 503 anthropic_not_configured", async ({ request }) => {
+    // Cloud Run preview has no key set, so the endpoint must fail fast with
+    // the stable slug the frontend localizes against — not a 500.
+    const res = await request.post("/api/v1/chat", {
+      data: { messages: [{ role: "user", content: "ping" }] }
+    });
+    // Allow either 503 (no key) or 200 (key configured) — both indicate the
+    // route is wired correctly. Anything else is a regression.
+    expect([200, 503]).toContain(res.status());
+    if (res.status() === 503) {
+      expect((await res.json()).detail).toBe("anthropic_not_configured");
+    }
+  });
+
+  test("/api/v1/route accepts a payload and routes to a documented status", async ({ request }) => {
+    const res = await request.post("/api/v1/route", {
+      data: { text: "PVD 工艺与喷涂成本对比" }
+    });
+    // Same shape as chat: 503 when unconfigured, 200 when wired up.
+    expect([200, 503]).toContain(res.status());
+    if (res.status() === 503) {
+      expect((await res.json()).detail).toBe("anthropic_not_configured");
+    } else {
+      const body = await res.json();
+      expect(body).toHaveProperty("model");
+      expect(body).toHaveProperty("confidence");
+    }
+  });
 });

@@ -75,4 +75,26 @@ test.describe("Velocity OS — features", () => {
     await page.getByRole("button", { name: /提出新问题/ }).first().click();
     await expect(page.getByText("提出战略问题")).toBeVisible();
   });
+
+  test("War Council renders seeded debate rounds + run-next-round button", async ({ page }) => {
+    await page.locator(".sidebar__nav").getByText("战略工作台").click();
+    await page.getByText("War Council").click();
+    // Seeded debate has rounds 1-3 on sq-1.
+    await expect(page.getByText("第 1 轮")).toBeVisible();
+    await expect(page.getByText("第 2 轮")).toBeVisible();
+    await expect(page.getByText("第 3 轮")).toBeVisible();
+    // Run-next-round button is the 4th-round CTA.
+    await expect(page.getByRole("button", { name: /运行第 4 轮/ })).toBeVisible();
+    // Synthesis pill carries the live stance counts.
+    await expect(page.getByText(/赞成/).first()).toBeVisible();
+  });
+
+  test("routing tester panel exposes input + sample chips", async ({ page }) => {
+    await page.locator(".sidebar__nav").getByText("助手中心").click();
+    await expect(page.getByText("路由测试 · Haiku 4.5 实时分类")).toBeVisible();
+    await expect(page.getByPlaceholder(/PVD 工艺/)).toBeVisible();
+    // Clicking a sample fills the input.
+    await page.getByRole("button", { name: "PVD 工艺与喷涂的成本对比?" }).click();
+    await expect(page.getByPlaceholder(/PVD 工艺/)).toHaveValue("PVD 工艺与喷涂的成本对比?");
+  });
 });
