@@ -3,12 +3,16 @@ import { Icon, KpiCard, Progress, HealthPill, ConfirmModal, Modal, makeId } from
 import { ProjectEditor } from "./OkrPage.jsx";
 import { ProjectDetail } from "../components/ProjectDetail.jsx";
 import { RunDialog } from "../components/RunDialog.jsx";
-import { Departments, KnowledgeDomains, SkillPacks, KnowledgeSources, Company, Projects, Objectives, Workflows, DeptActivity } from "../data/seed.js";
+import { Departments as SeedDepartments, KnowledgeDomains, SkillPacks, KnowledgeSources, Company, Projects, Objectives, Workflows, DeptActivity } from "../data/seed.js";
+import { useApi } from "../lib/api.js";
 
 export function DepartmentPage({ deptId }) {
   // Department record is derived from `deptId`; user edits in the
   // configuration modal layer on top via per-deptId override map. This
   // way switching departments doesn't need an effect to reset state.
+  // Department list comes from /api/v1/departments with seed fallback.
+  const { data: apiDepartments } = useApi("/api/v1/departments");
+  const Departments = apiDepartments ?? SeedDepartments;
   const baseDept = Departments.find(d => d.id === deptId) || Departments[0];
   const [overridesByDept, setOverridesByDept] = useState({});
   const dept = { ...baseDept, ...(overridesByDept[deptId] || {}) };

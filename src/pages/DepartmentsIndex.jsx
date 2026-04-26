@@ -1,6 +1,15 @@
 import React, { useState } from "react";
 import { Icon, HealthPill } from "../components/primitives.jsx";
-import { Departments } from "../data/seed.js";
+import { Departments as SeedDepartments } from "../data/seed.js";
+import { useApi } from "../lib/api.js";
+
+// Backend-aware Departments source. The API returns the same shape as
+// seed.js — we only translate parentId casing (camelCase preserved by the
+// alias generator). Falls back to the bundled seed when the API is offline.
+function useDepartments() {
+  const { data } = useApi("/api/v1/departments");
+  return data ?? SeedDepartments;
+}
 
 function buildDeptTree(list) {
   const byParent = new Map();
@@ -80,6 +89,7 @@ function DepartmentTreeNode({ dept, byParent, selectedId, expanded, toggleExpand
 export function DepartmentsIndex({ setRoute }) {
   const [selectedId, setSelectedId] = useState("__root__");
   const [expanded, setExpanded] = useState(() => new Set(["industrial-design", "service", "cop"]));
+  const Departments = useDepartments();
 
   function toggleExpand(id) {
     setExpanded(prev => {

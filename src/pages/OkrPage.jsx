@@ -33,8 +33,28 @@ export function OkrPage() {
     setObjectives(apiObjectives);
   }
 
-  const [projects, setProjects] = useState(() => SeedProjects.map(p => ({ ...p })));
-  const [decisions, setDecisions] = useState(() => SeedDecisions.map(d => ({ ...d })));
+  // Projects + Decisions are READ-ONLY against the API in Phase 2 step 1.
+  // Local mutations (create/edit/delete) stay client-side until POST/PATCH/
+  // DELETE endpoints land for these resources. When fresh API data arrives,
+  // we sync — local edits not yet persisted to the server are discarded
+  // (acceptable demo trade-off until writes are wired).
+  const { data: apiProjects } = useApi("/api/v1/projects");
+  const baseProjects = apiProjects ?? SeedProjects.map(p => ({ ...p }));
+  const [projects, setProjects] = useState(baseProjects);
+  const lastProjectsRef = useRef(apiProjects);
+  if (apiProjects && apiProjects !== lastProjectsRef.current) {
+    lastProjectsRef.current = apiProjects;
+    setProjects(apiProjects);
+  }
+
+  const { data: apiDecisions } = useApi("/api/v1/decisions");
+  const baseDecisions = apiDecisions ?? SeedDecisions.map(d => ({ ...d }));
+  const [decisions, setDecisions] = useState(baseDecisions);
+  const lastDecisionsRef = useRef(apiDecisions);
+  if (apiDecisions && apiDecisions !== lastDecisionsRef.current) {
+    lastDecisionsRef.current = apiDecisions;
+    setDecisions(apiDecisions);
+  }
 
   const [editingObj, setEditingObj] = useState(null);
   const [editingProj, setEditingProj] = useState(null);
