@@ -1,7 +1,7 @@
 import React, { useRef, useState, useMemo } from "react";
 import { Icon, KpiCard, HealthPill, Modal, ConfirmModal, makeId } from "../components/primitives.jsx";
 import { Departments, AssistantRoutingRules as SeedRoutingRules, ROUTE_PRIORITIES, SkillPacks, AuditLog as SeedAuditLog, AUDIT_CATEGORIES } from "../data/seed.js";
-import { useApi, apiPost, ApiError } from "../lib/api.js";
+import { useApi, apiPost, apiPatch, apiDelete, ApiError } from "../lib/api.js";
 
 const ROLE_OPTIONS = [
   { v: "ceo",   label: "CEO" },
@@ -23,8 +23,10 @@ function cellToCsv(v) {
 
 export function AssistantsPage({ setRoute }) {
   // Routing rules come from /api/v1/routing-rules with seed fallback.
-  // Local CRUD stays client-side until write endpoints land.
-  const { data: apiRules } = useApi("/api/v1/routing-rules");
+  // Writes go to POST/PATCH/DELETE /api/v1/routing-rules; on success we
+  // refresh the list. On failure (offline / preview without backend) we
+  // keep the optimistic local edit so the demo still feels responsive.
+  const { data: apiRules, refresh: refreshRules } = useApi("/api/v1/routing-rules");
   const baseRules = apiRules ?? SeedRoutingRules.map(r => ({ ...r }));
   const [rules, setRules] = useState(baseRules);
   const lastApiRef = useRef(apiRules);
@@ -35,15 +37,57 @@ export function AssistantsPage({ setRoute }) {
   const [editing, setEditing] = useState(null);
   const [confirm, setConfirm] = useState(null);
 
-  function save(next) {
-    setRules(prev => {
+  // Optimistic updaters — apply locally immediately, fire the API call
+  // alongside, fall through to a console.warn if the server rejects.
+  function setOptimistic(updater) {
+    setRules(prev => updater(prev));
+  }
+
+  async function save(next) {
+    const isNew = next.__isNew;
+    // Strip frontend-only fields before sending; the wire schema doesn't
+    // know about __isNew, and hits / lastHit are server-managed.
+    const wire = {
+      id: next.id,
+      priority: next.priority,
+      enabled: next.enabled,
+      intent: next.intent,
+      targetDept: next.targetDept,
+      targetSkill: next.targetSkill,
+      permission: next.permission,
+      note: next.note
+    };
+    setOptimistic(prev => {
       const i = prev.findIndex(r => r.id === next.id);
       if (i === -1) return [next, ...prev];
       const cp = prev.slice(); cp[i] = next; return cp;
     });
     setEditing(null);
+    try {
+      if (isNew) {
+        await apiPost("/api/v1/routing-rules", wire);
+      } else {
+        await apiPatch(`/api/v1/routing-rules/${next.id}`, wire);
+      }
+      refreshRules();
+    } catch (err) {
+      console.warn("[routing-rules] save failed", err instanceof ApiError ? err.detail : err);
+    }
   }
-  function del(id) { setRules(prev => prev.filter(r => r.id !== id)); setConfirm(null); }
+
+  async function del(id) {
+    setOptimistic(prev => prev.filter(r => r.id !== id));
+    setConfirm(null);
+    try {
+      await apiDelete(`/api/v1/routing-rules/${id}`);
+      refreshRules();
+    } catch (err) {
+      console.warn("[routing-rules] delete failed", err instanceof ApiError ? err.detail : err);
+    }
+  }
+
+  // Reorder is purely visual — the backend has no `position` column yet,
+  // so we deliberately keep this local-only.
   function move(id, delta) {
     setRules(prev => {
       const i = prev.indexOf(prev.find(r => r.id === id));
@@ -52,9 +96,23 @@ export function AssistantsPage({ setRoute }) {
       const cp = prev.slice(); [cp[i], cp[j]] = [cp[j], cp[i]]; return cp;
     });
   }
-  function toggleEnabled(id) {
-    setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
+
+  async function toggleEnabled(id) {
+    let nextEnabled;
+    setOptimistic(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      nextEnabled = !r.enabled;
+      return { ...r, enabled: nextEnabled };
+    }));
+    if (nextEnabled === undefined) return;
+    try {
+      await apiPatch(`/api/v1/routing-rules/${id}`, { enabled: nextEnabled });
+      refreshRules();
+    } catch (err) {
+      console.warn("[routing-rules] toggle failed", err instanceof ApiError ? err.detail : err);
+    }
   }
+
   function onNew() {
     setEditing({
       id: makeId("rt"),

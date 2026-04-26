@@ -5,6 +5,8 @@ audit log. All but routing rules are append-mostly with small mutations
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -12,6 +14,44 @@ from .. import models, schemas
 from ..db import get_db
 
 router = APIRouter(prefix="/api/v1", tags=["inbox"])
+
+
+def _now_label() -> str:
+    """Produce a human-readable timestamp matching the existing seed
+    shape (``2026-04-26 14:32``). Audit log + last_hit columns both use
+    this format so the frontend's table renders consistently."""
+    return datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+def _emit_audit(
+    db: Session,
+    *,
+    category: str,
+    severity: str,
+    action: str,
+    target: str | None,
+    scope: str | None = None,
+    actor: str = "system",
+    link: dict | None = None,
+) -> models.AuditEvent:
+    """Append a single AuditEvent row. Caller is responsible for
+    committing — we share the request's session so the write is atomic
+    with whatever triggered it.
+    """
+    row = models.AuditEvent(
+        id=schemas.make_id("au"),
+        at=_now_label(),
+        actor=actor,
+        ip="127.0.0.1",  # no real auth yet; placeholder so the col is non-null
+        category=category,
+        severity=severity,
+        action=action,
+        target=target,
+        scope=scope,
+        link=link,
+    )
+    db.add(row)
+    return row
 
 
 # --- Ingest Queue -------------------------------------------------------
@@ -103,6 +143,104 @@ def mark_all_notifications_read(db: Session = Depends(get_db)):
 def list_routing_rules(db: Session = Depends(get_db)):
     rows = db.query(models.RoutingRule).order_by(models.RoutingRule.id).all()
     return [schemas.RoutingRuleOut.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/routing-rules",
+    response_model=schemas.RoutingRuleOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_routing_rule(payload: schemas.RoutingRuleCreate, db: Session = Depends(get_db)):
+    rule_id = payload.id or schemas.make_id("rt")
+    if db.get(models.RoutingRule, rule_id) is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="routing_rule_id_taken")
+
+    row = models.RoutingRule(
+        id=rule_id,
+        priority=payload.priority or "medium",
+        enabled=payload.enabled,
+        intent=payload.intent,
+        target_dept=payload.target_dept,
+        target_skill=payload.target_skill,
+        permission=payload.permission,
+        note=payload.note,
+        hits=0,
+        last_hit="—",
+    )
+    db.add(row)
+    _emit_audit(
+        db,
+        category="routing",
+        severity="info",
+        action="新增路由规则",
+        target=payload.intent,
+        scope=payload.target_dept,
+        link={"page": "assistants", "ruleId": rule_id},
+    )
+    db.commit()
+    db.refresh(row)
+    return schemas.RoutingRuleOut.model_validate(row)
+
+
+@router.patch("/routing-rules/{rule_id}", response_model=schemas.RoutingRuleOut)
+def update_routing_rule(
+    rule_id: str,
+    payload: schemas.RoutingRuleUpdate,
+    db: Session = Depends(get_db),
+):
+    row = db.get(models.RoutingRule, rule_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="routing_rule_not_found")
+
+    data = payload.model_dump(exclude_unset=True, by_alias=False)
+    # Distinguish a pure enable/disable toggle from a substantive edit so
+    # the audit log reads naturally.
+    pure_toggle = set(data.keys()) == {"enabled"}
+    prior_enabled = row.enabled
+
+    for field, value in data.items():
+        setattr(row, field, value)
+
+    if pure_toggle:
+        action = "启用路由规则" if data["enabled"] else "停用路由规则"
+        severity = "info" if data["enabled"] == prior_enabled else "info"
+    else:
+        action = "更新路由规则"
+        severity = "info"
+
+    _emit_audit(
+        db,
+        category="routing",
+        severity=severity,
+        action=action,
+        target=row.intent,
+        scope=row.target_dept,
+        link={"page": "assistants", "ruleId": row.id},
+    )
+    db.commit()
+    db.refresh(row)
+    return schemas.RoutingRuleOut.model_validate(row)
+
+
+@router.delete("/routing-rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_routing_rule(rule_id: str, db: Session = Depends(get_db)):
+    row = db.get(models.RoutingRule, rule_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="routing_rule_not_found")
+    intent = row.intent
+    target_dept = row.target_dept
+    db.delete(row)
+    _emit_audit(
+        db,
+        category="routing",
+        severity="warning",
+        action="删除路由规则",
+        target=intent,
+        scope=target_dept,
+        # No deep-link target after delete — keep the link slot null.
+    )
+    db.commit()
+    return None
 
 
 # --- Audit log ----------------------------------------------------------

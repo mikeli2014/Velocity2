@@ -365,6 +365,32 @@ class RoutingRuleOut(_CamelModel):
     last_hit: str | None = None
 
 
+class RoutingRuleCreate(_CamelModel):
+    """Body for ``POST /api/v1/routing-rules``. ``id`` is optional; the
+    server generates one if absent. Mirrors the frontend's draft shape
+    so the editor can submit its in-flight state directly."""
+    id: str | None = None
+    priority: str | None = "medium"
+    enabled: bool = True
+    intent: str
+    target_dept: str | None = None
+    target_skill: str | None = None
+    permission: str | None = None
+    note: str | None = None
+
+
+class RoutingRuleUpdate(_CamelModel):
+    """Patch body for ``PATCH /api/v1/routing-rules/{id}``. Every field
+    optional; only ``model_dump(exclude_unset=True)`` keys are written."""
+    priority: str | None = None
+    enabled: bool | None = None
+    intent: str | None = None
+    target_dept: str | None = None
+    target_skill: str | None = None
+    permission: str | None = None
+    note: str | None = None
+
+
 class AuditEventOut(_CamelModel):
     id: str
     at: str | None = None
