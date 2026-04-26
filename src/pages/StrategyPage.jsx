@@ -1,11 +1,13 @@
 import React, { useState } from "react";
-import { Icon } from "../components/primitives.jsx";
-import { StrategyQuestion, StrategyQuestions, STRATEGY_STATUSES, Agents, DebateMessages, KnowledgeSources } from "../data/seed.js";
+import { Icon, Modal, makeId } from "../components/primitives.jsx";
+import { StrategyQuestion, StrategyQuestions, STRATEGY_STATUSES, Agents, DebateMessages, KnowledgeSources, Objectives } from "../data/seed.js";
 
 export function StrategyPage() {
   const [tab, setTab] = useState("canvas");
+  const [questions, setQuestions] = useState(() => StrategyQuestions.map(q => ({ ...q })));
   const [questionId, setQuestionId] = useState(StrategyQuestion.id);
-  const question = StrategyQuestions.find(q => q.id === questionId) || StrategyQuestion;
+  const [creating, setCreating] = useState(false);
+  const question = questions.find(q => q.id === questionId) || StrategyQuestion;
   const status = STRATEGY_STATUSES.find(s => s.v === question.status) || STRATEGY_STATUSES[0];
   const eyebrow = question.status === "decided"
     ? `战略工作台 · 已定调`
@@ -36,7 +38,7 @@ export function StrategyPage() {
           </div>
           <div className="row" style={{ gap: 8 }}>
             <button className="btn btn--ghost btn--sm"><Icon.Save size={13} /> 保存</button>
-            <button className="btn btn--ghost btn--sm"><Icon.Plus size={13} /> 提出新问题</button>
+            <button className="btn btn--ghost btn--sm" onClick={() => setCreating(true)}><Icon.Plus size={13} /> 提出新问题</button>
             <button className="btn btn--primary btn--sm"><Icon.Sparkles size={13} /> 生成 OKR / 项目草案</button>
           </div>
         </div>
@@ -56,28 +58,152 @@ export function StrategyPage() {
       </div>
 
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
-        {tab === "registry" && <QuestionRegistry currentId={questionId} onSelect={(id) => { setQuestionId(id); setTab("canvas"); }} />}
-        {tab === "canvas" && (isPrimary ? <StrategyCanvas /> : <StrategyPlaceholder question={question} variant="canvas" />)}
-        {tab === "war" && (isPrimary ? <WarCouncil /> : <StrategyPlaceholder question={question} variant="war" />)}
-        {tab === "options" && (isPrimary ? <StrategyOptions /> : <StrategyPlaceholder question={question} variant="options" />)}
-        {tab === "output" && (isPrimary ? <StructuredOutput /> : <StrategyPlaceholder question={question} variant="output" />)}
+        {tab === "registry" && <QuestionRegistry questions={questions} currentId={questionId} onSelect={(id) => { setQuestionId(id); setTab("canvas"); }} onNew={() => setCreating(true)} />}
+        {tab === "canvas" && (isPrimary ? <StrategyCanvas /> : <StrategyPlaceholder variant="canvas" />)}
+        {tab === "war" && (isPrimary ? <WarCouncil /> : <StrategyPlaceholder variant="war" />)}
+        {tab === "options" && (isPrimary ? <StrategyOptions /> : <StrategyPlaceholder variant="options" />)}
+        {tab === "output" && (isPrimary ? <StructuredOutput /> : <StrategyPlaceholder variant="output" />)}
       </div>
+
+      {creating && (
+        <NewQuestionModal
+          onClose={() => setCreating(false)}
+          onCreate={(q) => {
+            setQuestions(prev => [q, ...prev]);
+            setQuestionId(q.id);
+            setCreating(false);
+            setTab("canvas");
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function QuestionRegistry({ currentId, onSelect }) {
+function NewQuestionModal({ onClose, onCreate }) {
+  const [title, setTitle] = useState("");
+  const [summary, setSummary] = useState("");
+  const [asker, setAsker] = useState("陈志远 · CEO");
+  const [okrs, setOkrs] = useState([]);
+  const [context, setContext] = useState([]);
+  const [agents, setAgents] = useState(["ag-product", "ag-finance", "ag-gtm", "ag-risk"]);
+  const valid = title.trim().length > 0;
+
+  function toggle(arr, setter, id) {
+    setter(arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]);
+  }
+
+  function submit() {
+    onCreate({
+      id: makeId("sq"),
+      title: title.trim(),
+      summary: summary.trim(),
+      asker,
+      asked: new Date().toISOString().slice(0, 10),
+      status: "draft",
+      rounds: 0, optionsCount: 0, decisionId: null,
+      context, okrs, agents,
+      __isNew: true
+    });
+  }
+
+  return (
+    <Modal
+      title="提出战略问题"
+      sub="战略问题是 Velocity 战略画布的入口。挑选背景资料和 Agent 后,即可启动多轮研讨。"
+      large
+      onClose={onClose}
+      foot={<>
+        <button className="btn btn--ghost btn--sm" onClick={onClose}>取消</button>
+        <button className="btn btn--primary btn--sm" disabled={!valid} onClick={submit} style={!valid ? { opacity: 0.5, cursor: "not-allowed" } : {}}>
+          <Icon.Sparkles size={13} /> 创建并启动研讨
+        </button>
+      </>}
+    >
+      <div className="field">
+        <label className="field__label">问题 *</label>
+        <textarea className="textarea" value={title} onChange={e => setTitle(e.target.value)} placeholder="例如:FY26 是否加大线上 DTC 渠道投入?" />
+      </div>
+      <div className="field">
+        <label className="field__label">摘要 / 背景 (Optional)</label>
+        <textarea className="textarea" value={summary} onChange={e => setSummary(e.target.value)} placeholder="简要说明这个问题为什么需要研讨,以及关心的核心维度。" />
+      </div>
+      <div className="field">
+        <label className="field__label">提问人</label>
+        <input className="input" value={asker} onChange={e => setAsker(e.target.value)} />
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+          <Icon.Target size={14} style={{ color: "var(--vel-indigo)" }} />
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>关联 OKR ({okrs.length})</div>
+        </div>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          {Objectives.map(o => {
+            const sel = okrs.includes(o.code);
+            return (
+              <button key={o.id} className={`btn btn--sm ${sel ? "btn--primary" : "btn--ghost"}`} onClick={() => toggle(okrs, setOkrs, o.code)}>
+                <span className="num">{o.code}</span> · {o.title.split("—")[0].trim()}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+          <Icon.FileText size={14} style={{ color: "var(--success)" }} />
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>背景资料 ({context.length})</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 200, overflow: "auto", padding: 4 }}>
+          {KnowledgeSources.map(s => {
+            const sel = context.includes(s.id);
+            return (
+              <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 6, background: sel ? "var(--vel-indigo-50)" : "var(--slate-50)", cursor: "pointer" }}>
+                <input type="checkbox" checked={sel} onChange={() => toggle(context, setContext, s.id)} />
+                <span style={{ fontSize: 13, color: "var(--fg1)", flex: 1 }}>{s.title}</span>
+                <span className="pill pill--neutral">{s.scope}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+          <Icon.Users size={14} style={{ color: "var(--vel-violet)" }} />
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>参与 Agent ({agents.length})</div>
+        </div>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          {Agents.map(a => {
+            const sel = agents.includes(a.id);
+            return (
+              <button key={a.id} className={`btn btn--sm ${sel ? "btn--primary" : "btn--ghost"}`} onClick={() => toggle(agents, setAgents, a.id)}>
+                {a.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function QuestionRegistry({ questions, currentId, onSelect, onNew }) {
   const groups = STRATEGY_STATUSES.map(s => ({
     ...s,
-    items: StrategyQuestions.filter(q => q.status === s.v)
+    items: questions.filter(q => q.status === s.v)
   })).filter(g => g.items.length > 0);
 
   return (
     <div className="scroll" style={{ height: "100%", overflow: "auto", padding: 32, background: "var(--bg-page)" }}>
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-        <div style={{ fontSize: 13, color: "var(--fg2)", marginBottom: 18, lineHeight: 1.6 }}>
-          战略问题 (Strategy Questions) 是 Velocity 的核心战略资产 — 它把"想法 → 研讨 → 选项 → 决策 → OKR / 关键项目"沉淀成可追溯的工作流。
-          点击任一问题进入研讨画布。
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: 18, alignItems: "flex-start", gap: 24 }}>
+          <div style={{ fontSize: 13, color: "var(--fg2)", lineHeight: 1.6, flex: 1 }}>
+            战略问题 (Strategy Questions) 是 Velocity 的核心战略资产 — 它把"想法 → 研讨 → 选项 → 决策 → OKR / 关键项目"沉淀成可追溯的工作流。
+            点击任一问题进入研讨画布。
+          </div>
+          <button className="btn btn--primary btn--sm" onClick={onNew}><Icon.Plus size={13} /> 提出新问题</button>
         </div>
 
         {groups.map(g => (

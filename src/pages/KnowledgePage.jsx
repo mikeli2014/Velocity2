@@ -1,10 +1,12 @@
 import React, { useState } from "react";
-import { Icon, KpiCard, Progress, HealthPill } from "../components/primitives.jsx";
-import { Company, KnowledgeSources, KnowledgeDomains } from "../data/seed.js";
+import { Icon, KpiCard, Progress, HealthPill, Modal } from "../components/primitives.jsx";
+import { Company, KnowledgeSources, KnowledgeDomains, Projects, DecisionsRich } from "../data/seed.js";
 
 export function KnowledgePage() {
   const [tab, setTab] = useState("sources");
   const [filter, setFilter] = useState("all");
+  const [viewing, setViewing] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const sources = filter === "all" ? KnowledgeSources : KnowledgeSources.filter(s => s.scope.includes(filter));
 
   return (
@@ -17,8 +19,8 @@ export function KnowledgePage() {
             <p className="page-head__subtitle">沉淀公司战略、产品、品牌、组织、市场、竞品、流程、制度、项目和术语,作为所有 AI 分析的统一上下文。</p>
           </div>
           <div className="row" style={{ gap: 8 }}>
-            <button className="btn btn--ghost btn--sm"><Icon.Globe size={14} /> 网络抓取</button>
-            <button className="btn btn--primary btn--sm"><Icon.Upload size={14} /> 上传材料</button>
+            <button className="btn btn--ghost btn--sm" onClick={() => setUploading({ mode: "url" })}><Icon.Globe size={14} /> 网络抓取</button>
+            <button className="btn btn--primary btn--sm" onClick={() => setUploading({ mode: "file" })}><Icon.Upload size={14} /> 上传材料</button>
           </div>
         </div>
       </div>
@@ -74,7 +76,7 @@ export function KnowledgePage() {
               </thead>
               <tbody>
                 {sources.map(s => (
-                  <tr key={s.id} style={{ borderBottom: "1px solid var(--border-soft)" }}>
+                  <tr key={s.id} style={{ borderBottom: "1px solid var(--border-soft)", cursor: "pointer" }} onClick={() => setViewing(s)}>
                     <td style={{ padding: "12px 14px" }}>
                       <div className="row" style={{ gap: 10 }}>
                         <div style={{ width: 28, height: 32, borderRadius: 4, background: "var(--vel-indigo-50)", color: "var(--vel-indigo-700)", display: "grid", placeItems: "center", fontSize: 9, fontWeight: 800 }}>{s.type}</div>
@@ -90,7 +92,9 @@ export function KnowledgePage() {
                     <td style={{ padding: "12px 14px", fontFamily: "var(--font-mono)", color: "var(--fg2)" }}>{s.uses}</td>
                     <td style={{ padding: "12px 14px", color: "var(--fg2)" }}>{s.owner}</td>
                     <td style={{ padding: "12px 14px", color: "var(--fg3)", fontSize: 12 }}>{s.updated}</td>
-                    <td style={{ padding: "12px 14px" }}><button className="btn btn--text btn--sm"><Icon.MoreH size={14} /></button></td>
+                    <td style={{ padding: "12px 14px" }} onClick={e => e.stopPropagation()}>
+                      <button className="btn btn--text btn--sm" onClick={() => setViewing(s)} title="查看详情"><Icon.Eye size={14} /></button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -122,7 +126,265 @@ export function KnowledgePage() {
       {tab === "graph" && <KnowledgeGraph />}
       {tab === "ingest" && <IngestQueue />}
       {tab === "feedback" && <FeedbackPanel />}
+
+      {viewing && <KnowledgeSourceDetail source={viewing} onClose={() => setViewing(null)} />}
+      {uploading && <KnowledgeUploadFlow mode={uploading.mode} onClose={() => setUploading(false)} />}
     </div>
+  );
+}
+
+function KnowledgeSourceDetail({ source: s, onClose }) {
+  const linkedProjects = (s.linkedProjects || []).map(id => Projects.find(p => p.id === id)).filter(Boolean);
+  const linkedDecisions = (s.linkedDecisions || []).map(id => DecisionsRich.find(d => d.id === id)).filter(Boolean);
+  return (
+    <Modal
+      title={s.title}
+      sub={`${s.scope} · ${s.type} · ${s.size}`}
+      large
+      onClose={onClose}
+      foot={<>
+        <button className="btn btn--ghost btn--sm" onClick={onClose}>关闭</button>
+        <button className="btn btn--ghost btn--sm"><Icon.Eye size={13} /> 在 RAG 中预览</button>
+        <button className="btn btn--primary btn--sm"><Icon.Edit size={13} /> 编辑元数据</button>
+      </>}
+    >
+      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <HealthPill status={s.quality} />
+        <span className="pill pill--neutral"><Icon.User size={10} /> {s.owner}</span>
+        <span className="pill pill--neutral"><Icon.Calendar size={10} /> {s.updated}</span>
+        <span className="pill pill--neutral"><Icon.Activity size={10} /> {s.uses} 次引用</span>
+        {s.embeddings != null && <span className="pill pill--indigo"><Icon.Database size={10} /> {s.embeddings} 向量片段</span>}
+        {s.lang && <span className="pill pill--neutral">{s.lang}</span>}
+      </div>
+
+      {s.summary && (
+        <KSection icon={<Icon.Sparkles size={14} style={{ color: "var(--vel-indigo)" }} />} label="自动摘要">
+          <div style={{ fontSize: 13, color: "var(--fg1)", lineHeight: 1.6, padding: "10px 12px", background: "var(--vel-indigo-50)", border: "1px solid var(--vel-indigo-100)", borderRadius: 8 }}>{s.summary}</div>
+        </KSection>
+      )}
+
+      {s.excerpt && (
+        <KSection icon={<Icon.Quote size={14} style={{ color: "var(--fg3)" }} />} label="关键片段">
+          <div style={{ fontSize: 13, color: "var(--fg2)", lineHeight: 1.7, padding: "12px 14px", background: "var(--slate-50)", borderRadius: 8, borderLeft: "3px solid var(--slate-300)" }}>{s.excerpt}</div>
+        </KSection>
+      )}
+
+      {(s.tags || []).length > 0 && (
+        <KSection icon={<Icon.Tag size={14} style={{ color: "var(--vel-violet)" }} />} label={`标签 (${s.tags.length})`}>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            {s.tags.map(t => <span key={t} className="pill pill--neutral"><Icon.Hash size={10} /> {t}</span>)}
+          </div>
+        </KSection>
+      )}
+
+      {linkedProjects.length > 0 && (
+        <KSection icon={<Icon.Layers size={14} style={{ color: "var(--success)" }} />} label={`被引用的关键项目 (${linkedProjects.length})`}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {linkedProjects.map(p => (
+              <div key={p.id} className="row" style={{ gap: 10, padding: "8px 12px", background: "#fff", border: "1px solid var(--border-soft)", borderRadius: 8 }}>
+                <span className={`dot dot--${p.health}`} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--fg1)", flex: 1 }}>{p.name}</span>
+                <span className="pill pill--indigo num">{p.okr}</span>
+                <span className="num" style={{ fontSize: 11, color: "var(--fg3)" }}>{p.progress}%</span>
+              </div>
+            ))}
+          </div>
+        </KSection>
+      )}
+
+      {linkedDecisions.length > 0 && (
+        <KSection icon={<Icon.Quote size={14} style={{ color: "var(--vel-violet)" }} />} label={`关联决策 (${linkedDecisions.length})`}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {linkedDecisions.map(d => (
+              <div key={d.id} style={{ padding: "8px 12px", background: "#fff", border: "1px solid var(--border-soft)", borderRadius: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--fg1)" }}>{d.title}</div>
+                <div className="row" style={{ gap: 12, marginTop: 4, fontSize: 11, color: "var(--fg3)" }}>
+                  <span><Icon.User size={10} /> {d.owner}</span>
+                  <span><Icon.Calendar size={10} /> {d.date}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </KSection>
+      )}
+
+      <KSection icon={<Icon.Cpu size={14} style={{ color: "var(--fg3)" }} />} label="处理元数据">
+        <div className="grid grid-cols-2" style={{ gap: 10, fontSize: 12 }}>
+          <KMeta label="文件类型" value={s.type} />
+          <KMeta label="大小" value={s.size} />
+          <KMeta label="页数" value={s.pages || "—"} />
+          <KMeta label="语言" value={s.lang || "—"} />
+          <KMeta label="上传者" value={s.uploadedBy || s.owner} />
+          <KMeta label="向量片段" value={s.embeddings != null ? `${s.embeddings} 段` : "—"} />
+        </div>
+      </KSection>
+    </Modal>
+  );
+}
+
+function KSection({ icon, label, children }) {
+  return (
+    <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+      <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+        {icon}
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function KMeta({ label, value }) {
+  return (
+    <div style={{ padding: "8px 10px", background: "var(--slate-50)", borderRadius: 6 }}>
+      <div style={{ fontSize: 10, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 700, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 13, color: "var(--fg1)", fontWeight: 600 }}>{value}</div>
+    </div>
+  );
+}
+
+const UPLOAD_STAGES = [
+  { id: "fetch",    label: "采集",   desc: "从源拉取或解析上传的文件" },
+  { id: "parse",    label: "解析",   desc: "提取文本、表格与元数据" },
+  { id: "summary",  label: "摘要",   desc: "AI 自动生成段落摘要与要点" },
+  { id: "tag",      label: "打标签", desc: "识别业务标签 / 知识域" },
+  { id: "embed",    label: "向量化", desc: "切片并写入向量库 (BGE-M3)" },
+  { id: "review",   label: "待审核", desc: "进入人工审核或自动通过" }
+];
+
+function KnowledgeUploadFlow({ mode, onClose }) {
+  const [stage, setStage] = useState(0);
+  const [title, setTitle] = useState(mode === "url" ? "https://" : "");
+  const [scope, setScope] = useState("公司");
+  const [domain, setDomain] = useState(KnowledgeDomains[0].id);
+  const [running, setRunning] = useState(false);
+  const finished = stage >= UPLOAD_STAGES.length;
+
+  function start() {
+    setRunning(true);
+    setStage(0);
+    let i = 0;
+    const tick = () => {
+      i += 1;
+      setStage(i);
+      if (i < UPLOAD_STAGES.length) setTimeout(tick, 700);
+      else setRunning(false);
+    };
+    setTimeout(tick, 700);
+  }
+
+  return (
+    <Modal
+      title={mode === "url" ? "网络抓取 — 添加来源" : "上传材料 — 添加来源"}
+      sub="材料会经过解析、摘要、标签、向量化和质量审核,完成后进入公司知识中心。"
+      large
+      onClose={onClose}
+      foot={<>
+        <button className="btn btn--ghost btn--sm" onClick={onClose}>{finished ? "完成" : "取消"}</button>
+        {!finished && (
+          <button
+            className="btn btn--primary btn--sm"
+            disabled={running || !title.trim()}
+            style={(running || !title.trim()) ? { opacity: 0.5, cursor: "not-allowed" } : {}}
+            onClick={start}
+          >
+            <Icon.PlayCircle size={13} /> {running ? "处理中…" : "开始处理"}
+          </button>
+        )}
+      </>}
+    >
+      {!running && stage === 0 && (
+        <>
+          <div className="field">
+            <label className="field__label">{mode === "url" ? "URL" : "文件"}</label>
+            {mode === "url"
+              ? <input className="input" value={title} onChange={e => setTitle(e.target.value)} placeholder="https://aowei.com/report/2026q1" />
+              : (
+                <div style={{ border: "2px dashed var(--border)", borderRadius: 10, padding: 28, textAlign: "center", color: "var(--fg3)" }}>
+                  <Icon.Upload size={28} style={{ margin: "0 auto 8px", color: "var(--fg4)" }} />
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg2)" }}>拖入或点击选择文件</div>
+                  <div style={{ fontSize: 11, color: "var(--fg4)", marginTop: 4 }}>支持 PDF / DOCX / PPTX / XLSX / TXT / MD / 图集</div>
+                  <input
+                    type="text"
+                    placeholder="或输入文件名(模拟)"
+                    className="input"
+                    style={{ marginTop: 12, maxWidth: 320 }}
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                  />
+                </div>
+              )}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="field">
+              <label className="field__label">范围 (Scope)</label>
+              <select className="select" value={scope} onChange={e => setScope(e.target.value)}>
+                <option value="公司">公司级 (全员)</option>
+                <option value="工业设计">工业设计部</option>
+                <option value="服务部">服务部</option>
+                <option value="渠道运营">渠道运营 (COP)</option>
+                <option value="供应链">供应链</option>
+                <option value="市场部">市场部</option>
+              </select>
+            </div>
+            <div className="field">
+              <label className="field__label">归属知识域</label>
+              <select className="select" value={domain} onChange={e => setDomain(e.target.value)}>
+                {KnowledgeDomains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+          </div>
+        </>
+      )}
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 12 }}>
+          <Icon.Workflow size={14} style={{ color: "var(--vel-indigo)" }} />
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>处理流程</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {UPLOAD_STAGES.map((st, i) => {
+            const done = stage > i;
+            const active = stage === i && running;
+            return (
+              <div key={st.id} style={{
+                display: "grid", gridTemplateColumns: "26px 1fr 110px",
+                gap: 10, alignItems: "center",
+                padding: "10px 12px",
+                background: done ? "#DCFCE7" : active ? "var(--vel-indigo-50)" : "var(--slate-50)",
+                border: "1px solid " + (done ? "#86EFAC" : active ? "var(--vel-indigo-100)" : "var(--border-soft)"),
+                borderRadius: 8
+              }}>
+                {done
+                  ? <Icon.Check size={14} style={{ color: "var(--success)" }} />
+                  : active
+                    ? <span className="dot dot--info" style={{ display: "inline-block", animation: "pulse-ring 1.6s ease-out infinite" }} />
+                    : <span className="num" style={{ fontSize: 11, color: "var(--fg4)", fontWeight: 800 }}>{String(i + 1).padStart(2, "0")}</span>}
+                <div>
+                  <div style={{ fontSize: 13, color: "var(--fg1)", fontWeight: 600 }}>{st.label}</div>
+                  <div style={{ fontSize: 11, color: "var(--fg3)" }}>{st.desc}</div>
+                </div>
+                <span className={`pill ${done ? "pill--ok" : active ? "pill--info" : "pill--neutral"}`}>
+                  {done ? "完成" : active ? "进行中" : "待执行"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {finished && (
+        <div style={{ padding: "12px 14px", background: "#DCFCE7", border: "1px solid #86EFAC", borderRadius: 8 }}>
+          <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+            <Icon.Check size={14} style={{ color: "var(--success)" }} />
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#166534" }}>处理完成 · 已加入知识中心</div>
+          </div>
+          <div style={{ fontSize: 12, color: "#166534", lineHeight: 1.6 }}>
+            来源 <strong>"{title}"</strong> 已切分为约 96 个向量片段,自动生成 4 个标签,关联到 <strong>{KnowledgeDomains.find(d => d.id === domain)?.name}</strong>。质量状态:待审核。
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }
 

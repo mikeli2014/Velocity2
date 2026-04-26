@@ -193,14 +193,64 @@ export const SKILL_STATUSES = [
 ];
 
 export const KnowledgeSources = [
-  { id: "ks-1", title: "FY26 集团战略与年度 OKR", type: "PPT", scope: "公司", quality: "approved", uses: 142, owner: "战略办", updated: "2026-04-10", size: "8.2MB" },
-  { id: "ks-2", title: "全屋净水 2.0 产品方向白皮书 v3", type: "PDF", scope: "公司 / 工业设计", quality: "approved", uses: 87, owner: "李慕白", updated: "2026-04-18", size: "12.4MB" },
-  { id: "ks-3", title: "BP/SC/SA 三角协同操作手册", type: "DOC", scope: "渠道运营", quality: "review", uses: 64, owner: "周岚", updated: "2026-04-21", size: "2.1MB" },
-  { id: "ks-4", title: "奥维 2025Q4 厨卫品类报告", type: "XLSX", scope: "公司", quality: "approved", uses: 312, owner: "市场部", updated: "2026-02-08", size: "44.6MB" },
-  { id: "ks-5", title: "竞品 CMF 图库 (2025春夏)", type: "图集", scope: "工业设计", quality: "approved", uses: 521, owner: "苏婉", updated: "2026-03-30", size: "1.2GB" },
-  { id: "ks-6", title: "县域服务网络试点复盘", type: "DOC", scope: "服务部", quality: "draft", uses: 12, owner: "王锐", updated: "2026-04-22", size: "880KB" },
-  { id: "ks-7", title: "AI Native 转型决议 (董事会)", type: "MEMO", scope: "公司", quality: "approved", uses: 28, owner: "陈志远", updated: "2026-01-15", size: "120KB" },
-  { id: "ks-8", title: "零冷水技术路线图 v2", type: "PPT", scope: "工业设计", quality: "approved", uses: 156, owner: "孙阳", updated: "2026-04-02", size: "6.1MB" }
+  { id: "ks-1", title: "FY26 集团战略与年度 OKR", type: "PPT", scope: "公司", quality: "approved", uses: 142, owner: "战略办", updated: "2026-04-10", size: "8.2MB",
+    summary: "FY26 全年战略主线:用户为中心、渠道重构、设计中台、AI Native。每个主线对应一个公司级 Objective 与 3 个 KR。",
+    excerpt: "Velocity 的目标是把企业知识、战略、OKR 和关键项目整合成统一的认知背景,让所有 AI 输出都基于公司的真实情况。FY26 重点:全屋净水套系、200 城渠道协同、9 大品类 CMF 中台、Velocity 部门助手全员推广。",
+    tags: ["战略", "OKR", "FY26", "公司级"], pages: 42, lang: "zh-CN", uploadedBy: "战略办 · 周明", linkedProjects: ["proj-1", "proj-2", "proj-6"], linkedDecisions: ["d-1"], embeddings: 412 },
+  { id: "ks-2", title: "全屋净水 2.0 产品方向白皮书 v3", type: "PDF", scope: "公司 / 工业设计", quality: "approved", uses: 87, owner: "李慕白", updated: "2026-04-18", size: "12.4MB",
+    summary: "局改家庭场景下全屋净水套系的产品定位、用户画像、核心配置、安装与售后假设。",
+    excerpt: "面向 4-5 年房龄的局改家庭。核心痛点:水质硬度、二次污染、热水联动。建议套系组合:厨房净水器 + 全屋前置 + 中央净水 + 即热饮水。客单价目标 ¥18,000-22,000。",
+    tags: ["全屋净水", "局改", "产品定位", "客单价"], pages: 28, lang: "zh-CN", uploadedBy: "李慕白", linkedProjects: ["proj-1"], linkedDecisions: ["d-1"], embeddings: 196 },
+  { id: "ks-3", title: "BP/SC/SA 三角协同操作手册", type: "DOC", scope: "渠道运营", quality: "review", uses: 64, owner: "周岚", updated: "2026-04-21", size: "2.1MB",
+    summary: "BP (经销商) / SC (服务商) / SA (服务工程师) 三方在城市中的角色定义、利益分配、SLA 和数据共享机制。",
+    excerpt: "BP 负责整机销售与商品库存。SC 负责服务交付与备件库存。SA 负责实际上门与技师调度。三方在中台共享订单、工单、客户数据。",
+    tags: ["BP", "SC", "SA", "三角协同", "渠道"], pages: 18, lang: "zh-CN", uploadedBy: "周岚", linkedProjects: ["proj-2"], linkedDecisions: ["d-2"], embeddings: 76 },
+  { id: "ks-4", title: "奥维 2025Q4 厨卫品类报告", type: "XLSX", scope: "公司", quality: "approved", uses: 312, owner: "市场部", updated: "2026-02-08", size: "44.6MB",
+    summary: "奥维云网 2025Q4 厨卫品类销售数据,包含线上线下分渠道、价格带、品牌排名、增长率。",
+    excerpt: "厨卫品类 25Q4 线上 +18.4%,线下 -3.2%。价格带 3-4K 集中度提升 2.4pt。前 5 品牌:海尔、美的、A.O.史密斯、林内、北海。北海在 5K+ 高端段占比 12.4%。",
+    tags: ["奥维", "厨卫", "市场份额", "价格带", "竞品"], pages: 0, lang: "zh-CN", uploadedBy: "Anna 林", linkedProjects: [], linkedDecisions: [], embeddings: 824 },
+  { id: "ks-5", title: "竞品 CMF 图库 (2025春夏)", type: "图集", scope: "工业设计", quality: "approved", uses: 521, owner: "苏婉", updated: "2026-03-30", size: "1.2GB",
+    summary: "9 大品类共 1,200+ 张竞品产品照,自动识别色彩 / 材质 / 表面工艺并生成 CMF 标签。",
+    excerpt: "色彩:雾雪白、墨砂黑、沙金、玄铁灰、薄雾蓝。表面工艺:阳极氧化、PVD、喷涂、拉丝、高光。趋势:大面积 PVD-Black 在高端段渗透率显著上升。",
+    tags: ["CMF", "竞品", "色彩", "表面工艺", "趋势"], pages: 0, lang: "zh-CN", uploadedBy: "苏婉", linkedProjects: ["proj-3", "proj-4"], linkedDecisions: [], embeddings: 1206 },
+  { id: "ks-6", title: "县域服务网络试点复盘", type: "DOC", scope: "服务部", quality: "draft", uses: 12, owner: "王锐", updated: "2026-04-22", size: "880KB",
+    summary: "5 个县域试点城市 30 天数据复盘:响应时长、备件覆盖率、技师覆盖率、用户满意度。",
+    excerpt: "试点 5 城均值:平均响应 38h (目标 ≤12h),备件覆盖 47% (目标 ≥85%),技师覆盖 54% (目标 ≥80%),NPS 41 (目标 ≥60)。结论:县域必须以 SC 主导,先铺备件再铺人员。",
+    tags: ["县域", "服务", "试点", "复盘"], pages: 12, lang: "zh-CN", uploadedBy: "王锐", linkedProjects: ["proj-5"], linkedDecisions: ["d-2"], embeddings: 38 },
+  { id: "ks-7", title: "AI Native 转型决议 (董事会)", type: "MEMO", scope: "公司", quality: "approved", uses: 28, owner: "陈志远", updated: "2026-01-15", size: "120KB",
+    summary: "董事会 AI Native 转型决议:Velocity 作为公司级认知工作台,2026 年覆盖核心部门,2027 年扩展全员。",
+    excerpt: "AI Native 不是堆砌 AI 工具,而是把企业知识、战略、OKR 和工作流统一进 Velocity,让每个员工都在 AI 增强的工作流中工作。",
+    tags: ["董事会", "AI Native", "决议", "Velocity"], pages: 4, lang: "zh-CN", uploadedBy: "陈志远", linkedProjects: ["proj-6"], linkedDecisions: ["d-3"], embeddings: 12 },
+  { id: "ks-8", title: "零冷水技术路线图 v2", type: "PPT", scope: "工业设计", quality: "approved", uses: 156, owner: "孙阳", updated: "2026-04-02", size: "6.1MB",
+    summary: "零冷水 X 系列技术路线:即热模块、循环泵、智能控制、与净水系统的联动。",
+    excerpt: "零冷水核心:1) 高频即热模块 (功率密度 ≥35W/cm²);2) 智能循环泵 (待机功耗 ≤3W);3) 与净水器的双 API 联动。商品规划:X1 (主力) / X2 (高端) / X3 (出海)。",
+    tags: ["零冷水", "技术路线", "即热", "X系列"], pages: 36, lang: "zh-CN", uploadedBy: "孙阳", linkedProjects: ["proj-3"], linkedDecisions: [], embeddings: 168 }
+];
+
+// Recent check-in records (history) for KRs. Each entry = one update event.
+// progress is the value at that point in time, so the series is monotonic
+// per KR (modulo rare resets).
+export const KRCheckIns = [
+  // O1 KRs
+  { id: "ci-1-1-a", krId: "kr-1-1", date: "2026-04-22", author: "陈志远", progress: 70, current: "28.6%", note: "本月 DTC 试点 + 旗舰店双开,推动套系销售占比从 26.4% 升至 28.6%。" },
+  { id: "ci-1-1-b", krId: "kr-1-1", date: "2026-03-25", author: "李慕白", progress: 64, current: "26.4%", note: "全屋净水 2.0 样机完成,开始小范围试点。" },
+  { id: "ci-1-1-c", krId: "kr-1-1", date: "2026-02-26", author: "李慕白", progress: 56, current: "23.1%", note: "Q1 启动,基线数据。" },
+  { id: "ci-1-2-a", krId: "kr-1-2", date: "2026-04-22", author: "李慕白", progress: 64, current: "57", note: "净水器 NPS 较上月 +4。投诉主因:县域售后响应时长。" },
+  { id: "ci-1-2-b", krId: "kr-1-2", date: "2026-03-22", author: "李慕白", progress: 56, current: "53", note: "县域 NPS 拖累整体,需服务部介入。" },
+  { id: "ci-1-3-a", krId: "kr-1-3", date: "2026-04-15", author: "孙阳", progress: 100, current: "21.2%", note: "X 系列与净水器组合促销超预期,联动率达成 21.2%,KR 提前完成。" },
+  // O2 KRs
+  { id: "ci-2-1-a", krId: "kr-2-1", date: "2026-04-23", author: "周岚", progress: 41, current: "82", note: "二线 80 城启动,82 城进入协同状态。" },
+  { id: "ci-2-1-b", krId: "kr-2-1", date: "2026-03-25", author: "周岚", progress: 32, current: "64", note: "中台系统切换完成,开始大规模铺设。" },
+  { id: "ci-2-2-a", krId: "kr-2-2", date: "2026-04-20", author: "周岚", progress: 78, current: "76%", note: "同价覆盖率提升 3pt,主要来自一线城市闭环。" },
+  { id: "ci-2-3-a", krId: "kr-2-3", date: "2026-04-18", author: "汪洋", progress: 60, current: "4.1", note: "BP 满意度小幅回落,主因 SC 主导切换中的过渡期摩擦。" },
+  // O3 KRs
+  { id: "ci-3-1-a", krId: "kr-3-1", date: "2026-04-22", author: "苏婉", progress: 87, current: "1,046", note: "本周新增 38 条 CMF 条目,接近 1200 目标。" },
+  { id: "ci-3-2-a", krId: "kr-3-2", date: "2026-04-22", author: "苏婉", progress: 76, current: "48%", note: "新品复用率提升 6pt,主要来自 X 系列。" },
+  // O4 KRs
+  { id: "ci-4-1-a", krId: "kr-4-1", date: "2026-04-23", author: "黄毅", progress: 38, current: "1,128", note: "工业设计部全员上线,日活同环比 +29%。" },
+  { id: "ci-4-1-b", krId: "kr-4-1", date: "2026-03-30", author: "黄毅", progress: 28, current: "832", note: "Beta 阶段,主要面向 IT 与战略办。" },
+  { id: "ci-4-2-a", krId: "kr-4-2", date: "2026-04-22", author: "黄毅", progress: 73, current: "44%", note: "知识复用率持续上升。瓶颈:决策日志填写率不足。" },
+  { id: "ci-4-3-a", krId: "kr-4-3", date: "2026-04-22", author: "陈志远", progress: 39, current: "31%", note: "决策可追溯率仍低。下季度重点:对历史决策进行回填。" }
 ];
 
 export const Agents = [

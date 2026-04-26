@@ -11,7 +11,8 @@ import {
   DECISION_STATUSES,
   KnowledgeSources,
   Agents,
-  StrategyQuestions
+  StrategyQuestions,
+  KRCheckIns as SeedCheckIns
 } from "../data/seed.js";
 
 export function OkrPage() {
@@ -26,6 +27,8 @@ export function OkrPage() {
   const [viewingDec, setViewingDec] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [viewingProj, setViewingProj] = useState(null);
+  const [checkIns, setCheckIns] = useState(() => SeedCheckIns.map(c => ({ ...c })));
+  const [checkInKR, setCheckInKR] = useState(null);
 
   function rollupProgress(o) {
     if (!o.krs || !o.krs.length) return 0;
@@ -132,6 +135,8 @@ export function OkrPage() {
           {objectives.map(o => (
             <ObjectiveCard
               key={o.id} o={o}
+              checkIns={checkIns}
+              onCheckIn={(kr) => setCheckInKR({ kr, obj: o })}
               onEdit={() => setEditingObj({ ...o, krs: o.krs.map(k => ({ ...k })), linkedProjects: [...(o.linkedProjects || [])] })}
               onDelete={() => setConfirm({
                 title: `删除 ${o.code}?`,
@@ -208,11 +213,143 @@ export function OkrPage() {
           onEdit={d => { setViewingDec(null); setEditingDec({ ...d }); }}
         />
       )}
+      {checkInKR && (
+        <KRCheckInDialog
+          ctx={checkInKR}
+          checkIns={checkIns.filter(c => c.krId === checkInKR.kr.id)}
+          onClose={() => setCheckInKR(null)}
+          onSubmit={(entry) => {
+            setCheckIns(prev => [entry, ...prev]);
+            setObjectives(list => list.map(x => {
+              if (x.id !== checkInKR.obj.id) return x;
+              const krs = x.krs.map(k => k.id === checkInKR.kr.id
+                ? { ...k, progress: entry.progress, current: entry.current || k.current, status: entry.progress >= 100 ? "achieved" : k.status }
+                : k);
+              const next = { ...x, krs };
+              next.progress = rollupProgress(next);
+              return next;
+            }));
+            setCheckInKR(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function ObjectiveCard({ o, onEdit, onDelete, onUpdateKR }) {
+function KRCheckInDialog({ ctx, checkIns, onClose, onSubmit }) {
+  const { kr, obj } = ctx;
+  const [progress, setProgress] = useState(kr.progress);
+  const [current, setCurrent] = useState(kr.current || "");
+  const [note, setNote] = useState("");
+  const [author, setAuthor] = useState(obj.owner ? obj.owner.split("·")[0].trim() : "");
+  const valid = note.trim().length > 0;
+
+  function submit() {
+    onSubmit({
+      id: makeId("ci"),
+      krId: kr.id,
+      date: new Date().toISOString().slice(0, 10),
+      author: author.trim() || "—",
+      progress,
+      current: current.trim() || kr.current,
+      note: note.trim()
+    });
+  }
+
+  return (
+    <Modal
+      title={`Check-in · ${obj.code} / ${kr.title}`}
+      sub="Check-in 形成 KR 的执行轨迹,可被 AI 助手与战略画布引用,提升决策可追溯率。"
+      large
+      onClose={onClose}
+      foot={<>
+        <button className="btn btn--ghost btn--sm" onClick={onClose}>取消</button>
+        <button className="btn btn--primary btn--sm" disabled={!valid} onClick={submit} style={!valid ? { opacity: 0.5, cursor: "not-allowed" } : {}}>
+          <Icon.Save size={13} /> 保存 Check-in
+        </button>
+      </>}
+    >
+      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <span className="pill pill--indigo num">{obj.code}</span>
+        <span className="pill pill--neutral">目标 {kr.target}</span>
+        <span className="pill pill--neutral">当前 {kr.current}</span>
+        <span className="pill pill--neutral">{kr.progress}% 进度</span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div className="field">
+          <label className="field__label">本次 Check-in 进度 ({progress}%)</label>
+          <input type="range" min="0" max="100" value={progress} onChange={e => setProgress(Number(e.target.value))} />
+        </div>
+        <div className="field">
+          <label className="field__label">当前实际值</label>
+          <input className="input" value={current} onChange={e => setCurrent(e.target.value)} placeholder={kr.current} />
+        </div>
+        <div className="field">
+          <label className="field__label">提交人</label>
+          <input className="input" value={author} onChange={e => setAuthor(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="field__label">说明 *</label>
+        <textarea className="textarea" value={note} onChange={e => setNote(e.target.value)} placeholder="本次 check-in 的关键变化、风险或后续动作。" />
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 14 }}>
+        <div className="row" style={{ gap: 8, marginBottom: 12 }}>
+          <Icon.Activity size={14} style={{ color: "var(--vel-indigo)" }} />
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>历史 Check-in ({checkIns.length})</div>
+        </div>
+        <KRSparkline checkIns={checkIns} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+          {checkIns.length === 0 && <div style={{ padding: 16, textAlign: "center", fontSize: 12, color: "var(--fg4)", background: "var(--slate-50)", borderRadius: 8 }}>暂无历史记录,这将是首次 Check-in</div>}
+          {checkIns.map(c => (
+            <div key={c.id} style={{ padding: "10px 12px", background: "var(--slate-50)", border: "1px solid var(--border-soft)", borderRadius: 8 }}>
+              <div className="row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+                <div className="row" style={{ gap: 8 }}>
+                  <span className="num" style={{ fontSize: 11, color: "var(--fg3)" }}>{c.date}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--fg1)" }}>{c.author}</span>
+                </div>
+                <div className="row" style={{ gap: 8 }}>
+                  <span className="num" style={{ fontSize: 11, color: "var(--fg3)" }}>{c.current}</span>
+                  <span className="pill pill--info num">{c.progress}%</span>
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--fg2)", lineHeight: 1.5 }}>{c.note}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function KRSparkline({ checkIns }) {
+  if (!checkIns || checkIns.length === 0) return null;
+  // checkIns are newest-first; reverse for chronological plot
+  const data = checkIns.slice().reverse();
+  const w = 720, h = 60;
+  const xs = data.map((_, i) => (i / Math.max(1, data.length - 1)) * (w - 16) + 8);
+  const ys = data.map(d => h - 8 - (d.progress / 100) * (h - 16));
+  const points = xs.map((x, i) => `${x.toFixed(1)},${ys[i].toFixed(1)}`).join(" ");
+  return (
+    <div style={{ background: "var(--slate-50)", borderRadius: 8, padding: 8 }}>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: h }}>
+        <polyline points={points} fill="none" stroke="var(--vel-indigo)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        {data.map((d, i) => (
+          <g key={d.id}>
+            <circle cx={xs[i]} cy={ys[i]} r="3.5" fill="var(--vel-indigo)" />
+            <text x={xs[i]} y={ys[i] - 8} textAnchor="middle" fontSize="9" fontFamily="JetBrains Mono" fill="var(--fg3)">{d.progress}%</text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function ObjectiveCard({ o, onEdit, onDelete, onUpdateKR, onCheckIn, checkIns = [] }) {
   return (
     <div className="card" style={{ padding: 22 }}>
       <div className="row" style={{ alignItems: "flex-start", gap: 16 }}>
@@ -249,21 +386,29 @@ function ObjectiveCard({ o, onEdit, onDelete, onUpdateKR }) {
             尚未定义 Key Result — 点击右上 <Icon.Edit size={11} style={{ verticalAlign: "-2px" }} /> 编辑添加
           </div>
         )}
-        {o.krs.map(kr => (
-          <div key={kr.id} style={{ display: "grid", gridTemplateColumns: "20px 1fr 110px 90px 130px 60px", gap: 12, alignItems: "center", padding: "8px 12px", background: "var(--slate-50)", borderRadius: 8 }}>
-            <Icon.Hash size={14} style={{ color: "var(--fg4)" }} />
-            <div style={{ fontSize: 13, color: "var(--fg2)" }}>{kr.title}</div>
-            <div style={{ fontSize: 11, color: "var(--fg3)" }}>目标 <strong className="num" style={{ color: "var(--fg1)" }}>{kr.target}</strong></div>
-            <div style={{ fontSize: 11, color: "var(--fg3)" }}>当前 <strong className="num" style={{ color: "var(--fg1)" }}>{kr.current}</strong></div>
-            <input
-              type="range" min="0" max="100" value={kr.progress}
-              onChange={e => onUpdateKR(kr.id, { progress: Number(e.target.value), status: Number(e.target.value) >= 100 ? "achieved" : kr.status })}
-              style={{ width: "100%" }}
-              title="拖动调整进度"
-            />
-            <span className="num" style={{ fontSize: 12, color: "var(--fg2)", textAlign: "right" }}>{kr.progress}%</span>
-          </div>
-        ))}
+        {o.krs.map(kr => {
+          const krChecks = checkIns.filter(c => c.krId === kr.id);
+          const last = krChecks[0];
+          return (
+            <div key={kr.id} style={{ display: "grid", gridTemplateColumns: "20px 1fr 110px 90px 130px 60px 28px", gap: 12, alignItems: "center", padding: "8px 12px", background: "var(--slate-50)", borderRadius: 8 }}>
+              <Icon.Hash size={14} style={{ color: "var(--fg4)" }} />
+              <div>
+                <div style={{ fontSize: 13, color: "var(--fg2)" }}>{kr.title}</div>
+                {last && <div style={{ fontSize: 10, color: "var(--fg4)", marginTop: 2 }}>最近 check-in · {last.date} · {last.author}{krChecks.length > 1 ? ` · 共 ${krChecks.length} 次` : ""}</div>}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--fg3)" }}>目标 <strong className="num" style={{ color: "var(--fg1)" }}>{kr.target}</strong></div>
+              <div style={{ fontSize: 11, color: "var(--fg3)" }}>当前 <strong className="num" style={{ color: "var(--fg1)" }}>{kr.current}</strong></div>
+              <input
+                type="range" min="0" max="100" value={kr.progress}
+                onChange={e => onUpdateKR(kr.id, { progress: Number(e.target.value), status: Number(e.target.value) >= 100 ? "achieved" : kr.status })}
+                style={{ width: "100%" }}
+                title="拖动调整进度"
+              />
+              <span className="num" style={{ fontSize: 12, color: "var(--fg2)", textAlign: "right" }}>{kr.progress}%</span>
+              <button className="icon-btn" title="Check-in" onClick={() => onCheckIn && onCheckIn(kr)}><Icon.RefreshCw size={13} /></button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
