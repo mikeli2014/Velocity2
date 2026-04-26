@@ -60,13 +60,64 @@ export const Objectives = [
 ];
 
 export const Projects = [
-  { id: "proj-1", name: "全屋净水 2.0 — 局改方案产品化", health: "ok", progress: 64, owner: "李慕白", dept: "工业设计 · 产品", okr: "O1", milestone: "样机评审", due: "2026-05-12", risks: 1 },
-  { id: "proj-2", name: "BP/SC/SA 三角协同 200 城落地", health: "warn", progress: 41, owner: "周岚", dept: "渠道运营 (COP)", okr: "O2", milestone: "二线城市启动", due: "2026-06-30", risks: 4 },
-  { id: "proj-3", name: "零冷水燃气热水器 X 系列", health: "ok", progress: 81, owner: "孙阳", dept: "工业设计", okr: "O1", milestone: "量产爬坡", due: "2026-04-28", risks: 0 },
-  { id: "proj-4", name: "9 大品类 CMF 中台 Phase 2", health: "ok", progress: 78, owner: "苏婉", dept: "工业设计", okr: "O3", milestone: "竞品色彩库收口", due: "2026-05-20", risks: 1 },
-  { id: "proj-5", name: "县域市场服务网络重塑", health: "danger", progress: 22, owner: "王锐", dept: "服务部", okr: "O2", milestone: "试点城市选定", due: "2026-05-05", risks: 6 },
-  { id: "proj-6", name: "Velocity 部门助手全员推广", health: "warn", progress: 33, owner: "黄毅", dept: "IT / Velocity 平台组", okr: "O4", milestone: "工业设计部上线", due: "2026-04-30", risks: 2 },
-  { id: "proj-7", name: "新风净化机 G3 海外首发", health: "ok", progress: 55, owner: "Renee", dept: "海外事业部", okr: "O1", milestone: "欧标认证完成", due: "2026-07-10", risks: 1 }
+  { id: "proj-1", name: "全屋净水 2.0 — 局改方案产品化", health: "ok", progress: 64, owner: "李慕白", deptId: "industrial-design", dept: "工业设计 · 产品", okr: "O1", milestone: "样机评审", due: "2026-05-12", risks: 1, started: "2025-11-10", contributors: ["李慕白", "孙阳", "苏婉", "陈思源"], milestones: [
+    { id: "m1-1", name: "用户画像与需求收口", date: "2025-12-15", status: "achieved" },
+    { id: "m1-2", name: "概念设计评审", date: "2026-02-05", status: "achieved" },
+    { id: "m1-3", name: "样机评审 (DV)", date: "2026-05-12", status: "in-progress" },
+    { id: "m1-4", name: "小批量验证 (PV)", date: "2026-08-01", status: "todo" }
+  ], risksDetail: [
+    { id: "r1-1", text: "膜组件供应商杭州东方目前单一来源,12月初到货受春节影响", level: "warn", owner: "陈思源" }
+  ], linkedDecisions: ["d-1"], linkedSources: ["ks-2", "ks-8"], description: "面向 4-5 年房龄家庭的局改型全屋净水套系,重点优化安装与售后体验。" },
+  { id: "proj-2", name: "BP/SC/SA 三角协同 200 城落地", health: "warn", progress: 41, owner: "周岚", deptId: "cop", dept: "渠道运营 (COP)", okr: "O2", milestone: "二线城市启动", due: "2026-06-30", risks: 4, started: "2025-09-01", contributors: ["周岚", "马俊", "韩雪"], milestones: [
+    { id: "m2-1", name: "一线 30 城签约", date: "2025-12-20", status: "achieved" },
+    { id: "m2-2", name: "中台系统切换", date: "2026-03-15", status: "achieved" },
+    { id: "m2-3", name: "二线 80 城启动", date: "2026-05-30", status: "in-progress" },
+    { id: "m2-4", name: "县域试点 (90 城)", date: "2026-09-30", status: "todo" }
+  ], risksDetail: [
+    { id: "r2-1", text: "线上线下同价机制在 32 个城市仍存在盲点", level: "warn", owner: "周岚" },
+    { id: "r2-2", text: "BP 经销商满意度较 Q4 下降 4pt", level: "warn", owner: "汪洋" },
+    { id: "r2-3", text: "两大省份 SC 招商进度落后 30%", level: "danger", owner: "段晗" },
+    { id: "r2-4", text: "DTC 与线下利益冲突 escalation 5 起", level: "warn", owner: "周岚" }
+  ], linkedDecisions: ["d-2"], linkedSources: ["ks-3"], description: "三方角色定义清晰、数据共享、利益对齐,作为 200 城渠道铺设的基座。" },
+  { id: "proj-3", name: "零冷水燃气热水器 X 系列", health: "ok", progress: 81, owner: "孙阳", deptId: "industrial-design", dept: "工业设计", okr: "O1", milestone: "量产爬坡", due: "2026-04-28", risks: 0, started: "2025-06-01", contributors: ["孙阳", "苏婉", "韩松"], milestones: [
+    { id: "m3-1", name: "工程样机", date: "2025-09-15", status: "achieved" },
+    { id: "m3-2", name: "DV/PV 验证", date: "2026-01-10", status: "achieved" },
+    { id: "m3-3", name: "量产爬坡", date: "2026-04-28", status: "in-progress" }
+  ], risksDetail: [], linkedDecisions: [], linkedSources: ["ks-8"], description: "0 冷水主流型号 X 系列,目标实现 1 秒出热水,与净水器联动复购。" },
+  { id: "proj-4", name: "9 大品类 CMF 中台 Phase 2", health: "ok", progress: 78, owner: "苏婉", deptId: "id-cmf", dept: "工业设计", okr: "O3", milestone: "竞品色彩库收口", due: "2026-05-20", risks: 1, started: "2025-07-15", contributors: ["苏婉", "孙阳", "林然"], milestones: [
+    { id: "m4-1", name: "Phase 1 上线 (4 大品类)", date: "2025-12-01", status: "achieved" },
+    { id: "m4-2", name: "竞品色彩库收口", date: "2026-05-20", status: "in-progress" },
+    { id: "m4-3", name: "9 大品类全部入库", date: "2026-09-15", status: "todo" }
+  ], risksDetail: [
+    { id: "r4-1", text: "奥维采集接口稳定性不足,触发 3 次回填", level: "warn", owner: "林然" }
+  ], linkedDecisions: [], linkedSources: ["ks-5"], description: "把色彩、材质、表面工艺统一进入中台,实现跨品类复用与提案加速。" },
+  { id: "proj-5", name: "县域市场服务网络重塑", health: "danger", progress: 22, owner: "王锐", deptId: "service", dept: "服务部", okr: "O2", milestone: "试点城市选定", due: "2026-05-05", risks: 6, started: "2026-02-01", contributors: ["王锐", "高翔", "陈刚"], milestones: [
+    { id: "m5-1", name: "供应商资质与覆盖度调研", date: "2026-03-01", status: "achieved" },
+    { id: "m5-2", name: "试点城市选定 (10 城)", date: "2026-05-05", status: "in-progress" },
+    { id: "m5-3", name: "前 30 城 SC 选型", date: "2026-08-30", status: "todo" }
+  ], risksDetail: [
+    { id: "r5-1", text: "县域 SC 备件库存覆盖率仅 47%,远低于服务标准", level: "danger", owner: "高翔" },
+    { id: "r5-2", text: "技师认证体系尚未在县域落地", level: "danger", owner: "王锐" },
+    { id: "r5-3", text: "退货率 11.4% 直接影响 NPS", level: "danger", owner: "王锐" },
+    { id: "r5-4", text: "投诉响应平均 38 小时,目标 ≤12 小时", level: "warn", owner: "高翔" },
+    { id: "r5-5", text: "部分省份服务费用结算延迟", level: "warn", owner: "王锐" },
+    { id: "r5-6", text: "区域调度系统与 ERP 未打通", level: "warn", owner: "Tomas 朱" }
+  ], linkedDecisions: ["d-2"], linkedSources: ["ks-6"], description: "以 SC 主导重新组织县域服务网络,对齐渠道协同节奏。" },
+  { id: "proj-6", name: "Velocity 部门助手全员推广", health: "warn", progress: 33, owner: "黄毅", deptId: "it", dept: "IT / Velocity 平台组", okr: "O4", milestone: "工业设计部上线", due: "2026-04-30", risks: 2, started: "2026-01-08", contributors: ["黄毅", "Tomas 朱", "陈志远"], milestones: [
+    { id: "m6-1", name: "工业设计部上线", date: "2026-04-30", status: "in-progress" },
+    { id: "m6-2", name: "服务部上线", date: "2026-06-30", status: "todo" },
+    { id: "m6-3", name: "全公司开放", date: "2026-12-31", status: "todo" }
+  ], risksDetail: [
+    { id: "r6-1", text: "知识复用率 44%,KR 进度落后", level: "warn", owner: "黄毅" },
+    { id: "r6-2", text: "决策可追溯率仅 31%", level: "warn", owner: "陈志远" }
+  ], linkedDecisions: ["d-3"], linkedSources: ["ks-7"], description: "Velocity 从战略画布走向部门日常工作平台,O4 KR1/2/3 的核心承载。" },
+  { id: "proj-7", name: "新风净化机 G3 海外首发", health: "ok", progress: 55, owner: "Renee", deptId: "industrial-design", dept: "海外事业部", okr: "O1", milestone: "欧标认证完成", due: "2026-07-10", risks: 1, started: "2025-08-15", contributors: ["Renee", "孙阳", "宋平"], milestones: [
+    { id: "m7-1", name: "欧标 CE 认证启动", date: "2026-01-15", status: "achieved" },
+    { id: "m7-2", name: "欧标认证完成", date: "2026-07-10", status: "in-progress" },
+    { id: "m7-3", name: "首批渠道铺货", date: "2026-09-30", status: "todo" }
+  ], risksDetail: [
+    { id: "r7-1", text: "RoHS 报告需补充 2 项材料", level: "warn", owner: "宋平" }
+  ], linkedDecisions: [], linkedSources: [], description: "G3 新风净化机首次进入欧洲市场,以德/法/北欧为优先国。" }
 ];
 
 export const Departments = [
