@@ -8,6 +8,10 @@ SQLAlchemy~=2.0.36
 # Postgres driver: only loaded when DATABASE_URL points at postgres://. SQLite
 # (the dev default) uses the stdlib's sqlite3.
 psycopg[binary]~=3.2.0
-# Anthropic SDK is a Phase-1 dependency so the wiring is in place; no calls
-# happen yet. With prompt caching enabled when Phase 2 lands.
+# Anthropic SDK + httpx are coupled: anthropic 0.39.x calls
+# httpx.Client(proxies=...), but httpx 0.28+ removed that kwarg —
+# leading to `TypeError: got an unexpected keyword argument 'proxies'`
+# when Anthropic() is instantiated. Pin httpx to the 0.27.x line
+# until we upgrade the SDK to a version that supports httpx 0.28+.
+httpx>=0.27,<0.28
 anthropic~=0.39.0
