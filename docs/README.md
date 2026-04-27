@@ -1,5 +1,8 @@
 # Velocity OS — Product Documents
 
+> ⚠️ **当前已交付状态的完整文档集请见 [`handoff/`](./handoff/README.md)**(中文,8 个文档)。
+> 本目录其余文件为项目早期产品思考(v1/v2),与现有实现存在出入时,以 `handoff/` 为准。
+
 This folder holds the source-of-truth product thinking behind the Velocity OS UI in `src/`. The chat transcript and HTML prototypes were generated from these documents — when implementing or extending the UI, refer back here to understand intent.
 
 ## Files
