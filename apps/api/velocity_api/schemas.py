@@ -689,6 +689,47 @@ class ChatResponseOut(_CamelModel):
     usage: ChatUsageOut
 
 
+# --- LLM call telemetry -----------------------------------------------
+
+
+class LLMCallOut(_CamelModel):
+    id: str
+    route: str
+    model: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_input_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    latency_ms: int = 0
+    status: str = "ok"
+    error_detail: str | None = None
+    created_at: str | None = None  # ISO timestamp
+
+
+class LLMUsageBucket(_CamelModel):
+    """Per-model or per-route aggregation row in the summary response."""
+    key: str  # model name or route slug
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_input_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+
+
+class LLMUsageSummaryOut(_CamelModel):
+    total_calls: int = 0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_cache_read_input_tokens: int = 0
+    total_cache_creation_input_tokens: int = 0
+    # Cache hit ratio: cache_read / (cache_read + cache_creation +
+    # uncached_input). 0.0..1.0.
+    cache_hit_ratio: float = 0.0
+    by_model: list[LLMUsageBucket] = Field(default_factory=list)
+    by_route: list[LLMUsageBucket] = Field(default_factory=list)
+    recent: list[LLMCallOut] = Field(default_factory=list)
+
+
 # --- Health ------------------------------------------------------------
 
 

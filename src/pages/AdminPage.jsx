@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { Icon, KpiCard, Avatar, Progress } from "../components/primitives.jsx";
 import { OrgTree, LLMs, PolicyRouting, DeptUsage, TopUsers } from "../data/seed.js";
+import { useApi } from "../lib/api.js";
 
 export function AdminPage({ setRoute }) {
   const [tab, setTab] = useState("usage");
@@ -47,6 +48,106 @@ export function AdminPage({ setRoute }) {
   );
 }
 
+// Live AI usage panel — reads /api/v1/llm-usage/summary and shows
+// real Sonnet / Haiku token totals + cache hit ratio. The historical
+// chart below it is still seeded sample data (no historical roll-up
+// table yet).
+function LiveUsagePanel() {
+  const { data, loading, refresh } = useApi("/api/v1/llm-usage/summary?limit=10");
+  const fmt = (n) => (n || 0).toLocaleString("zh-CN");
+  if (loading || !data) {
+    return (
+      <div className="card" style={{ padding: 22, marginBottom: 18 }}>
+        <div style={{ fontSize: 12, color: "var(--fg3)" }}>正在加载实时 AI 用量…</div>
+      </div>
+    );
+  }
+  const ratio = Math.round((data.cacheHitRatio || 0) * 100);
+  const ratioColor = ratio >= 60 ? "var(--success-text)" : ratio >= 30 ? "var(--warning-text)" : "var(--fg3)";
+  const ratioBg    = ratio >= 60 ? "#DCFCE7"            : ratio >= 30 ? "#FEF3C7"            : "var(--slate-50)";
+  return (
+    <div className="card" style={{ padding: 22, marginBottom: 18 }}>
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
+        <div className="row" style={{ gap: 8 }}>
+          <Icon.Activity size={14} style={{ color: "var(--vel-indigo)" }} />
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)" }}>实时 AI 用量 · Anthropic 调用</div>
+          <span className="pill pill--ok"><span className="dot dot--ok" style={{ marginRight: 4 }} />在线</span>
+        </div>
+        <button className="btn btn--ghost btn--sm" onClick={refresh}><Icon.RefreshCw size={12} /> 刷新</button>
+      </div>
+      <div className="grid grid-cols-4" style={{ marginBottom: 18 }}>
+        <KpiCard label="累计调用" value={fmt(data.totalCalls)} subtitle={`其中 ${data.recent.filter(r => r.status === "ok").length} / ${data.recent.length} 最近成功`} />
+        <KpiCard label="输入 Token" value={fmt(data.totalInputTokens + data.totalCacheCreationInputTokens + data.totalCacheReadInputTokens)} subtitle={`未缓存 ${fmt(data.totalInputTokens)}`} />
+        <KpiCard label="输出 Token" value={fmt(data.totalOutputTokens)} />
+        <div className="card" style={{ padding: 14, background: ratioBg, border: `1px solid ${ratioColor}33` }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>缓存命中率</div>
+          <div className="num" style={{ fontSize: 26, fontWeight: 800, color: ratioColor }}>{ratio}%</div>
+          <div style={{ fontSize: 11, color: "var(--fg3)" }}>读取 {fmt(data.totalCacheReadInputTokens)} / 创建 {fmt(data.totalCacheCreationInputTokens)}</div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2" style={{ gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>按模型</div>
+          {data.byModel.length === 0 && <div style={{ fontSize: 12, color: "var(--fg4)" }}>暂无调用记录</div>}
+          {data.byModel.map(b => (
+            <div key={b.key} className="row" style={{ justifyContent: "space-between", padding: "6px 0", borderTop: "1px solid var(--border-soft)" }}>
+              <div className="row" style={{ gap: 6 }}>
+                <Icon.Cpu size={11} style={{ color: "var(--vel-indigo)" }} />
+                <span style={{ fontSize: 12, color: "var(--fg1)", fontWeight: 600 }}>{b.key}</span>
+              </div>
+              <span className="num" style={{ fontSize: 12, color: "var(--fg2)" }}>{b.calls} 次 · {fmt(b.inputTokens + b.outputTokens)} tok</span>
+            </div>
+          ))}
+        </div>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>按路由</div>
+          {data.byRoute.length === 0 && <div style={{ fontSize: 12, color: "var(--fg4)" }}>暂无调用记录</div>}
+          {data.byRoute.map(b => (
+            <div key={b.key} className="row" style={{ justifyContent: "space-between", padding: "6px 0", borderTop: "1px solid var(--border-soft)" }}>
+              <div className="row" style={{ gap: 6 }}>
+                <Icon.GitBranch size={11} style={{ color: "var(--vel-indigo)" }} />
+                <span style={{ fontSize: 12, color: "var(--fg1)", fontWeight: 600 }}>{b.key}</span>
+              </div>
+              <span className="num" style={{ fontSize: 12, color: "var(--fg2)" }}>{b.calls} 次 · {fmt(b.inputTokens + b.outputTokens)} tok</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      {data.recent.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>最近调用</div>
+          <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "var(--fg3)" }}>
+                {["路由", "模型", "状态", "延迟", "输入", "输出", "缓存读"].map(h =>
+                  <th key={h} style={{ padding: "6px 10px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>{h}</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {data.recent.map(r => (
+                <tr key={r.id} style={{ borderTop: "1px solid var(--border-soft)" }}>
+                  <td style={{ padding: "6px 10px", color: "var(--fg2)" }}>{r.route}</td>
+                  <td style={{ padding: "6px 10px", color: "var(--fg2)", fontFamily: "var(--font-mono)" }}>{r.model}</td>
+                  <td style={{ padding: "6px 10px" }}>
+                    <span className={`pill ${r.status === "ok" ? "pill--ok" : "pill--danger"}`}>
+                      {r.status === "ok" ? "ok" : (r.errorDetail || "error")}
+                    </span>
+                  </td>
+                  <td style={{ padding: "6px 10px", fontFamily: "var(--font-mono)", color: "var(--fg2)" }}>{r.latencyMs}ms</td>
+                  <td style={{ padding: "6px 10px", fontFamily: "var(--font-mono)", color: "var(--fg2)" }}>{fmt(r.inputTokens)}</td>
+                  <td style={{ padding: "6px 10px", fontFamily: "var(--font-mono)", color: "var(--fg2)" }}>{fmt(r.outputTokens)}</td>
+                  <td style={{ padding: "6px 10px", fontFamily: "var(--font-mono)", color: "var(--success-text)" }}>{fmt(r.cacheReadInputTokens)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UsageDashboard() {
   const [range, setRange] = useState("month");
   const ranges = [
@@ -78,6 +179,8 @@ function UsageDashboard() {
 
   return (
     <div>
+      <LiveUsagePanel />
+
       <div className="row" style={{ gap: 6, marginBottom: 16 }}>
         {ranges.map(r => (
           <button key={r.id} className={`btn btn--sm ${range === r.id ? "btn--primary" : "btn--ghost"}`} onClick={() => setRange(r.id)}>
@@ -85,7 +188,7 @@ function UsageDashboard() {
           </button>
         ))}
         <div style={{ flex: 1 }} />
-        <span className="pill pill--ok"><span className="dot dot--ok" style={{ marginRight: 4 }} />实时计费</span>
+        <span className="pill pill--neutral">以下为演示历史数据</span>
       </div>
 
       <div className="grid grid-cols-4" style={{ marginBottom: 20 }}>

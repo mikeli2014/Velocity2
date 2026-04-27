@@ -1,5 +1,14 @@
-import React from "react";
+import React, { useState } from "react";
 import { Icon, KpiCard, Progress, HealthPill } from "../components/primitives.jsx";
+import { OnboardingTour } from "../components/OnboardingTour.jsx";
+
+// localStorage probe — duplicated here to keep OnboardingTour.jsx
+// component-only (Vite fast refresh complains about non-component
+// exports from component files). Cheap one-liner.
+function hasSeenTour() {
+  if (typeof window === "undefined") return false;
+  try { return window.localStorage.getItem("velocity:tour-dismissed") === "1"; } catch { return false; }
+}
 import {
   Company,
   Objectives as SeedObjectives,
@@ -57,6 +66,7 @@ function auditToActivity(e) {
 }
 
 export function HomePage({ setRoute }) {
+  const [tourOpen, setTourOpen] = useState(false);
   // All read-only — Home is a dashboard. Each useApi falls back to the
   // bundled seed when the endpoint isn't reachable.
   const Objectives    = useApi("/api/v1/objectives").data        ?? SeedObjectives;
@@ -93,6 +103,9 @@ export function HomePage({ setRoute }) {
             </p>
           </div>
           <div className="row" style={{ gap: 8 }}>
+            <button className="btn btn--ghost btn--sm" onClick={() => setTourOpen(true)}>
+              <Icon.PlayCircle size={14} /> {hasSeenTour() ? "再看导览" : "🎬 5 分钟产品导览"}
+            </button>
             <button className="btn btn--ghost btn--sm"><Icon.Calendar size={14} /> 本季度</button>
             <button className="btn btn--primary btn--sm" onClick={() => setRoute({ page: "strategy" })}>
               <Icon.Plus size={14} /> 提出战略问题
@@ -319,6 +332,7 @@ export function HomePage({ setRoute }) {
           </div>
         </div>
       </div>
+      {tourOpen && <OnboardingTour onClose={() => setTourOpen(false)} setRoute={setRoute} />}
     </div>
   );
 }

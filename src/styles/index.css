@@ -370,3 +370,92 @@ input { font-family: inherit; }
 .row-actions { display: inline-flex; gap: 2px; }
 .btn--danger { background: #fee2e2; color: #b91c1c; }
 .btn--danger:hover { background: #fecaca; }
+
+/* --- Mobile drawer + hamburger ---------------------------------------
+   Off by default on desktop. The hamburger button + scrim become
+   visible at <768px, and the sidebar transforms into a slide-in
+   drawer driven by .app.is-drawer-open. */
+
+.topbar__hamburger {
+  display: none;
+  width: 36px; height: 36px;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 8px;
+  align-items: center; justify-content: center;
+  color: var(--fg2);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+.topbar__hamburger:hover { background: var(--slate-50); color: var(--fg1); }
+
+.drawer-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  border: none;
+  padding: 0;
+  z-index: 90;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .app { grid-template-columns: 1fr; }
+  /* Sidebar becomes a fixed-position slide-in drawer. */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: min(280px, 86vw);
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.05);
+  }
+  .app.is-drawer-open .sidebar { transform: translateX(0); }
+  .app.is-drawer-open .drawer-scrim { display: block; }
+
+  .topbar__hamburger { display: inline-flex; }
+
+  /* Topbar simplifications: hide the search box on mobile to save
+     room (Cmd-K palette still works), shrink crumbs. */
+  .topbar { padding: 10px 14px; gap: 8px; }
+  .topbar__search { display: none; }
+  .topbar__crumbs { font-size: 12px; gap: 4px; min-width: 0; }
+  .topbar__crumbs > *:not(:last-child):not(strong) { display: none; }
+
+  .content { padding: 18px 14px 60px; }
+  .page-head__title { font-size: 22px; }
+  .page-head__subtitle { font-size: 13px; }
+
+  /* Fold the multi-column grids into a single column. */
+  .grid-cols-2,
+  .grid-cols-3,
+  .grid-cols-4 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Tabs scroll horizontally instead of wrapping. */
+  .tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { white-space: nowrap; flex-shrink: 0; }
+
+  /* Modals fill more of the screen so the form fields stay tappable. */
+  .modal { width: min(100%, 100%); margin: 0; border-radius: 12px 12px 0 0; max-height: 92vh; }
+  .modal--lg { width: 100%; }
+  .modal-overlay { align-items: flex-end; }
+
+  /* Most table-style layouts assume horizontal room. Wrap them so
+     they scroll instead of breaking the page. */
+  .card table { min-width: 560px; }
+  .card { overflow-x: auto; }
+
+  /* Page-head action rows wrap onto a second line cleanly. */
+  .page-head__row { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .row-actions { flex-wrap: wrap; }
+}

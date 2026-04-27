@@ -49,17 +49,30 @@ function renderPage(route, setRoute) {
 
 export default function App() {
   const [route, setRoute] = useState({ page: "home" });
+  // Mobile drawer state. Desktop ignores this entirely (CSS hides the
+  // drawer affordances above 768px). Closing the drawer on every nav
+  // is the right default — users tap an item, then expect content.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const setRouteAndCloseDrawer = (next) => {
+    setRoute(next);
+    setDrawerOpen(false);
+  };
 
   return (
-    <div className="app">
-      <Sidebar route={route} setRoute={setRoute} />
+    <div className={`app${drawerOpen ? " is-drawer-open" : ""}`}>
+      <Sidebar route={route} setRoute={setRouteAndCloseDrawer} />
       <div className="main">
-        <Topbar route={route} setRoute={setRoute} />
+        <Topbar route={route} setRoute={setRouteAndCloseDrawer} onToggleDrawer={() => setDrawerOpen(o => !o)} />
         <Suspense fallback={<PageFallback />}>
-          {renderPage(route, setRoute)}
+          {renderPage(route, setRouteAndCloseDrawer)}
         </Suspense>
       </div>
-      <CommandPalette setRoute={setRoute} />
+      <button
+        className="drawer-scrim"
+        aria-label="关闭菜单"
+        onClick={() => setDrawerOpen(false)}
+      />
+      <CommandPalette setRoute={setRouteAndCloseDrawer} />
     </div>
   );
 }

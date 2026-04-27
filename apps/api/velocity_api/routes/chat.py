@@ -43,6 +43,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from time import perf_counter
 from typing import Any, Iterable, Iterator
 
 import anthropic
@@ -54,6 +55,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..db import get_db
 from ..settings import settings
+from ..telemetry import record_llm_call
 
 logger = logging.getLogger("velocity_api.chat")
 
@@ -276,6 +278,7 @@ def chat(payload: schemas.ChatRequestIn, db: Session = Depends(get_db)) -> schem
     model = payload.model or DEFAULT_CHAT_MODEL
     max_tokens = payload.max_tokens or DEFAULT_MAX_TOKENS
 
+    started = perf_counter()
     try:
         message = client.messages.create(
             model=model,
@@ -285,14 +288,34 @@ def chat(payload: schemas.ChatRequestIn, db: Session = Depends(get_db)) -> schem
         )
     except anthropic.RateLimitError as exc:
         logger.warning("anthropic rate limited: %s", exc)
+        record_llm_call(db, route="chat", model=model,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="rate_limited")
+        db.commit()
         raise HTTPException(status_code=429, detail="anthropic_rate_limited") from exc
     except anthropic.BadRequestError as exc:
         logger.warning("anthropic bad request: %s", exc)
+        record_llm_call(db, route="chat", model=model,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="bad_request")
+        db.commit()
         raise HTTPException(status_code=400, detail="anthropic_bad_request") from exc
     except anthropic.APIError as exc:
         logger.exception("anthropic upstream error")
+        record_llm_call(db, route="chat", model=model,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="upstream_error")
+        db.commit()
         raise HTTPException(status_code=502, detail="anthropic_upstream_error") from exc
 
+    record_llm_call(
+        db,
+        route="chat",
+        model=getattr(message, "model", model),
+        latency_ms=int((perf_counter() - started) * 1000),
+        usage=getattr(message, "usage", None),
+    )
+    db.commit()
     return schemas.ChatResponseOut(
         text=_extract_text(message),
         model=getattr(message, "model", model),
@@ -330,13 +353,23 @@ def _stream_completion(
     max_tokens: int,
     system: list[dict[str, Any]],
     messages: Iterable[dict[str, Any]],
+    db: Session | None = None,
+    route: str = "chat",
 ) -> Iterator[bytes]:
     """Drive an Anthropic streaming call and yield SSE-encoded events.
 
     Catches typed Anthropic exceptions and translates them to a final
     ``error`` event (callers should NOT raise after the response has
     started streaming — the HTTP status is already 200).
+
+    When ``db`` is provided, writes one ``LLMCall`` row at end-of-stream
+    (or on error) and commits — the request session stays open for the
+    duration of the StreamingResponse so this is safe.
     """
+    started = perf_counter()
+    err_detail: str | None = None
+    final_usage: Any = None
+    final_model: str = model
     try:
         with client.messages.stream(
             model=model,
@@ -348,21 +381,41 @@ def _stream_completion(
                 if token:
                     yield _sse({"type": "text", "text": token})
             final = stream.get_final_message()
+            final_usage = getattr(final, "usage", None)
+            final_model = getattr(final, "model", model)
             yield _sse(
                 {
                     "type": "done",
-                    "model": getattr(final, "model", model),
+                    "model": final_model,
                     "stopReason": getattr(final, "stop_reason", None),
-                    "usage": _usage_to_schema(getattr(final, "usage", None) or {}).model_dump(by_alias=True),
+                    "usage": _usage_to_schema(final_usage or {}).model_dump(by_alias=True),
                 }
             )
     except anthropic.RateLimitError:
+        err_detail = "rate_limited"
         yield _sse({"type": "error", "detail": "anthropic_rate_limited"})
     except anthropic.BadRequestError:
+        err_detail = "bad_request"
         yield _sse({"type": "error", "detail": "anthropic_bad_request"})
     except anthropic.APIError:
         logger.exception("anthropic stream upstream error")
+        err_detail = "upstream_error"
         yield _sse({"type": "error", "detail": "anthropic_upstream_error"})
+
+    if db is not None:
+        record_llm_call(
+            db,
+            route=route,
+            model=final_model,
+            latency_ms=int((perf_counter() - started) * 1000),
+            usage=final_usage,
+            status="ok" if err_detail is None else "error",
+            error_detail=err_detail,
+        )
+        try:
+            db.commit()
+        except Exception:  # noqa: BLE001
+            logger.exception("llm telemetry commit failed; ignoring")
 
 
 @router.post("/stream")
@@ -394,6 +447,8 @@ def chat_stream(payload: schemas.ChatRequestIn, db: Session = Depends(get_db)):
             max_tokens=max_tokens,
             system=system_blocks,
             messages=api_messages,
+            db=db,
+            route="chat.stream",
         ),
         media_type="text/event-stream",
         headers={

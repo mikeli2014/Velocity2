@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from time import perf_counter
 from typing import Any, Iterator
 
 import anthropic
@@ -41,6 +42,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..db import get_db
+from ..telemetry import record_llm_call
 from . import chat as chat_module
 from .chat import DEFAULT_CHAT_MODEL, _company_block, _extract_text
 
@@ -272,6 +274,7 @@ def run_debate_round(
             transcript=transcript,
             round_no=round_no,
         )
+        agent_started = perf_counter()
         try:
             message = client.messages.create(
                 model=DEFAULT_CHAT_MODEL,
@@ -281,18 +284,37 @@ def run_debate_round(
             )
         except anthropic.RateLimitError as exc:
             logger.warning("debate rate-limited at agent idx %s: %s", idx, exc)
+            record_llm_call(db, route="debate.round", model=DEFAULT_CHAT_MODEL,
+                            latency_ms=int((perf_counter() - agent_started) * 1000),
+                            status="error", error_detail="rate_limited")
+            db.commit()
             raise HTTPException(status_code=429, detail="anthropic_rate_limited") from exc
         except anthropic.BadRequestError as exc:
             logger.warning("debate bad request: %s", exc)
+            record_llm_call(db, route="debate.round", model=DEFAULT_CHAT_MODEL,
+                            latency_ms=int((perf_counter() - agent_started) * 1000),
+                            status="error", error_detail="bad_request")
+            db.commit()
             raise HTTPException(status_code=400, detail="anthropic_bad_request") from exc
         except anthropic.APIError as exc:
             logger.exception("debate upstream error")
+            record_llm_call(db, route="debate.round", model=DEFAULT_CHAT_MODEL,
+                            latency_ms=int((perf_counter() - agent_started) * 1000),
+                            status="error", error_detail="upstream_error")
+            db.commit()
             raise HTTPException(status_code=502, detail="anthropic_upstream_error") from exc
 
         text = _extract_text(message) or ""
         stance, body = _parse_stance(text)
         cited = _scrape_source_ids(body, valid_source_ids)
         used_model = getattr(message, "model", DEFAULT_CHAT_MODEL)
+        record_llm_call(
+            db,
+            route="debate.round",
+            model=used_model,
+            latency_ms=int((perf_counter() - agent_started) * 1000),
+            usage=getattr(message, "usage", None),
+        )
 
         row = models.DebateMessage(
             id=schemas.make_id("dm"),
@@ -385,6 +407,9 @@ def run_debate_round_stream(
             )
             buffered = ""
             final_model = DEFAULT_CHAT_MODEL
+            final_usage: Any = None
+            agent_started = perf_counter()
+            err_detail: str | None = None
             try:
                 with client.messages.stream(
                     model=DEFAULT_CHAT_MODEL,
@@ -398,15 +423,28 @@ def run_debate_round_stream(
                             yield chat_module._sse({"type": "text", "agentId": agent.id, "text": token})
                     final = stream.get_final_message()
                     final_model = getattr(final, "model", DEFAULT_CHAT_MODEL)
+                    final_usage = getattr(final, "usage", None)
             except anthropic.RateLimitError:
-                yield chat_module._sse({"type": "error", "detail": "anthropic_rate_limited"})
-                return
+                err_detail = "rate_limited"
             except anthropic.BadRequestError:
-                yield chat_module._sse({"type": "error", "detail": "anthropic_bad_request"})
-                return
+                err_detail = "bad_request"
             except anthropic.APIError:
                 logger.exception("debate stream upstream error")
-                yield chat_module._sse({"type": "error", "detail": "anthropic_upstream_error"})
+                err_detail = "upstream_error"
+
+            record_llm_call(
+                db,
+                route="debate.round.stream",
+                model=final_model,
+                latency_ms=int((perf_counter() - agent_started) * 1000),
+                usage=final_usage,
+                status="ok" if err_detail is None else "error",
+                error_detail=err_detail,
+            )
+
+            if err_detail:
+                yield chat_module._sse({"type": "error", "detail": f"anthropic_{err_detail}"})
+                db.commit()
                 return
 
             stance, body = _parse_stance(buffered)
@@ -506,6 +544,7 @@ def debate_synthesis(question_id: str, db: Session = Depends(get_db)):
 
     system_blocks, user_msg, pro, con, concern = _build_synthesis_prompt(db, question_id)
 
+    started = perf_counter()
     try:
         message = client.messages.create(
             model=DEFAULT_CHAT_MODEL,
@@ -514,13 +553,33 @@ def debate_synthesis(question_id: str, db: Session = Depends(get_db)):
             messages=[{"role": "user", "content": user_msg}],
         )
     except anthropic.RateLimitError as exc:
+        record_llm_call(db, route="debate.synthesis", model=DEFAULT_CHAT_MODEL,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="rate_limited")
+        db.commit()
         raise HTTPException(status_code=429, detail="anthropic_rate_limited") from exc
     except anthropic.BadRequestError as exc:
+        record_llm_call(db, route="debate.synthesis", model=DEFAULT_CHAT_MODEL,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="bad_request")
+        db.commit()
         raise HTTPException(status_code=400, detail="anthropic_bad_request") from exc
     except anthropic.APIError as exc:
         logger.exception("synthesis upstream error")
+        record_llm_call(db, route="debate.synthesis", model=DEFAULT_CHAT_MODEL,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="upstream_error")
+        db.commit()
         raise HTTPException(status_code=502, detail="anthropic_upstream_error") from exc
 
+    record_llm_call(
+        db,
+        route="debate.synthesis",
+        model=getattr(message, "model", DEFAULT_CHAT_MODEL),
+        latency_ms=int((perf_counter() - started) * 1000),
+        usage=getattr(message, "usage", None),
+    )
+    db.commit()
     return schemas.DebateSynthesisOut(
         text=_extract_text(message),
         pro=pro,
@@ -556,6 +615,8 @@ def debate_synthesis_stream(question_id: str, db: Session = Depends(get_db)):
             max_tokens=SYNTHESIS_MAX_TOKENS,
             system=system_blocks,
             messages=[{"role": "user", "content": user_msg}],
+            db=db,
+            route="debate.synthesis.stream",
         )
 
     return StreamingResponse(
@@ -711,6 +772,7 @@ def generate_options(question_id: str, db: Session = Depends(get_db)):
         },
     ]
 
+    started = perf_counter()
     try:
         message = client.messages.create(
             model=DEFAULT_CHAT_MODEL,
@@ -719,13 +781,33 @@ def generate_options(question_id: str, db: Session = Depends(get_db)):
             messages=[{"role": "user", "content": "请基于以上研讨生成候选战略选项。"}],
         )
     except anthropic.RateLimitError as exc:
+        record_llm_call(db, route="strategy.options", model=DEFAULT_CHAT_MODEL,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="rate_limited")
+        db.commit()
         raise HTTPException(status_code=429, detail="anthropic_rate_limited") from exc
     except anthropic.BadRequestError as exc:
+        record_llm_call(db, route="strategy.options", model=DEFAULT_CHAT_MODEL,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="bad_request")
+        db.commit()
         raise HTTPException(status_code=400, detail="anthropic_bad_request") from exc
     except anthropic.APIError as exc:
         logger.exception("options upstream error")
+        record_llm_call(db, route="strategy.options", model=DEFAULT_CHAT_MODEL,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="upstream_error")
+        db.commit()
         raise HTTPException(status_code=502, detail="anthropic_upstream_error") from exc
 
+    record_llm_call(
+        db,
+        route="strategy.options",
+        model=getattr(message, "model", DEFAULT_CHAT_MODEL),
+        latency_ms=int((perf_counter() - started) * 1000),
+        usage=getattr(message, "usage", None),
+    )
+    db.commit()  # persist telemetry even if subsequent parse fails
     raw = chat_module._extract_text(message)
     payload = _parse_json_payload(raw)
     if not payload or not isinstance(payload, dict) or not isinstance(payload.get("options"), list):
@@ -842,6 +924,7 @@ def generate_structured_output(
         },
     ]
 
+    started = perf_counter()
     try:
         message = client.messages.create(
             model=DEFAULT_CHAT_MODEL,
@@ -850,13 +933,33 @@ def generate_structured_output(
             messages=[{"role": "user", "content": "请生成结构化输出草案。"}],
         )
     except anthropic.RateLimitError as exc:
+        record_llm_call(db, route="strategy.structured_output", model=DEFAULT_CHAT_MODEL,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="rate_limited")
+        db.commit()
         raise HTTPException(status_code=429, detail="anthropic_rate_limited") from exc
     except anthropic.BadRequestError as exc:
+        record_llm_call(db, route="strategy.structured_output", model=DEFAULT_CHAT_MODEL,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="bad_request")
+        db.commit()
         raise HTTPException(status_code=400, detail="anthropic_bad_request") from exc
     except anthropic.APIError as exc:
         logger.exception("structured-output upstream error")
+        record_llm_call(db, route="strategy.structured_output", model=DEFAULT_CHAT_MODEL,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="upstream_error")
+        db.commit()
         raise HTTPException(status_code=502, detail="anthropic_upstream_error") from exc
 
+    record_llm_call(
+        db,
+        route="strategy.structured_output",
+        model=getattr(message, "model", DEFAULT_CHAT_MODEL),
+        latency_ms=int((perf_counter() - started) * 1000),
+        usage=getattr(message, "usage", None),
+    )
+    db.commit()
     raw = chat_module._extract_text(message)
     payload = _parse_json_payload(raw)
     if not isinstance(payload, dict) or "objective" not in payload or "decision" not in payload:

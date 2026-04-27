@@ -430,3 +430,30 @@ class AuditEvent(Base):
     target: Mapped[str | None] = mapped_column(String, nullable=True)
     scope: Mapped[str | None] = mapped_column(String, nullable=True)
     link: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+# --- LLM call telemetry ----------------------------------------------
+
+
+class LLMCall(Base):
+    """One row per Anthropic API call. Powers the Admin "AI 用量 · 缓存命中"
+    panel — tokens by model + route, cache hit ratio, recent calls.
+
+    Lightly written to (sub-millisecond insert per write); we don't
+    bother with retention windows for the demo. Production would add
+    a daily roll-up + a TTL cleanup task.
+    """
+
+    __tablename__ = "llm_calls"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    route: Mapped[str] = mapped_column(String)  # "chat" / "debate.round" / "debate.synthesis" / ...
+    model: Mapped[str] = mapped_column(String)
+    input_tokens: Mapped[int] = mapped_column(default=0)
+    output_tokens: Mapped[int] = mapped_column(default=0)
+    cache_read_input_tokens: Mapped[int] = mapped_column(default=0)
+    cache_creation_input_tokens: Mapped[int] = mapped_column(default=0)
+    latency_ms: Mapped[int] = mapped_column(default=0)
+    status: Mapped[str] = mapped_column(String, default="ok")  # "ok" | "error"
+    error_detail: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow)

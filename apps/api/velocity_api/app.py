@@ -35,6 +35,7 @@ from .routes import (
     inbox,
     knowledge,
     knowledge_sources,
+    llm_usage,
     objectives,
     projects,
     route,
@@ -142,6 +143,7 @@ app.include_router(inbox.router)
 app.include_router(chat.router)
 app.include_router(debate.router)
 app.include_router(route.router)
+app.include_router(llm_usage.router)
 
 
 # --- Static SPA fallback ------------------------------------------------

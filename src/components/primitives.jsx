@@ -11,6 +11,7 @@ const I = (path, viewBox = "0 0 24 24") => ({ size = 16, className = "", style }
 
 export const Icon = {
   Home: I(<><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></>),
+  Menu: I(<><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></>),
   Database: I(<><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></>),
   Compass: I(<><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></>),
   Target: I(<><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></>),

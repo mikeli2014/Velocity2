@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 import re
+from time import perf_counter
 from typing import Any
 
 import anthropic
@@ -36,6 +37,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..db import get_db
+from ..telemetry import record_llm_call
 from . import chat as chat_module
 from .chat import HAIKU_MODEL, _company_block, _extract_text
 
@@ -126,6 +128,7 @@ def classify_route(payload: schemas.RouteRequestIn, db: Session = Depends(get_db
         },
     ]
 
+    started = perf_counter()
     try:
         message = client.messages.create(
             model=HAIKU_MODEL,
@@ -134,13 +137,33 @@ def classify_route(payload: schemas.RouteRequestIn, db: Session = Depends(get_db
             messages=[{"role": "user", "content": payload.text.strip()}],
         )
     except anthropic.RateLimitError as exc:
+        record_llm_call(db, route="route", model=HAIKU_MODEL,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="rate_limited")
+        db.commit()
         raise HTTPException(status_code=429, detail="anthropic_rate_limited") from exc
     except anthropic.BadRequestError as exc:
+        record_llm_call(db, route="route", model=HAIKU_MODEL,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="bad_request")
+        db.commit()
         raise HTTPException(status_code=400, detail="anthropic_bad_request") from exc
     except anthropic.APIError as exc:
         logger.exception("route upstream error")
+        record_llm_call(db, route="route", model=HAIKU_MODEL,
+                        latency_ms=int((perf_counter() - started) * 1000),
+                        status="error", error_detail="upstream_error")
+        db.commit()
         raise HTTPException(status_code=502, detail="anthropic_upstream_error") from exc
 
+    record_llm_call(
+        db,
+        route="route",
+        model=getattr(message, "model", HAIKU_MODEL),
+        latency_ms=int((perf_counter() - started) * 1000),
+        usage=getattr(message, "usage", None),
+    )
+    db.commit()
     raw = _extract_text(message)
     rule_id, conf, rationale = _parse(raw)
 

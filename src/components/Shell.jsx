@@ -97,7 +97,7 @@ export function Sidebar({ route, setRoute }) {
   );
 }
 
-export function Topbar({ route, setRoute }) {
+export function Topbar({ route, setRoute, onToggleDrawer }) {
   // Notifications come from /api/v1/notifications with seed fallback.
   // Mark-read uses POST /api/v1/notifications/{id}/read (or /mark-all-read).
   const { data: apiNotifs, refresh: refreshNotifs } = useApi("/api/v1/notifications");
@@ -155,6 +155,16 @@ export function Topbar({ route, setRoute }) {
 
   return (
     <header className="topbar">
+      {onToggleDrawer && (
+        <button
+          className="topbar__hamburger"
+          onClick={onToggleDrawer}
+          aria-label="切换菜单"
+          title="菜单"
+        >
+          <Icon.Menu size={18} />
+        </button>
+      )}
       <div className="topbar__crumbs">
         <Icon.Home size={14} />
         {crumbs.map((c, i) => (
