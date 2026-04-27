@@ -97,4 +97,37 @@ test.describe("Velocity OS — features", () => {
     await page.getByRole("button", { name: "PVD 工艺与喷涂的成本对比?" }).click();
     await expect(page.getByPlaceholder(/PVD 工艺/)).toHaveValue("PVD 工艺与喷涂的成本对比?");
   });
+
+  test("knowledge upload dialog has a real file picker dropzone", async ({ page }) => {
+    await page.locator(".sidebar__nav").getByText("公司知识中心").click();
+    await page.getByRole("button", { name: /上传材料/ }).click();
+    await expect(page.getByText("上传材料 — 添加来源")).toBeVisible();
+
+    // The dashed dropzone exists and the hidden <input type="file"> is in
+    // the DOM (proving the picker is actually wired, not a static box).
+    await expect(page.getByText("拖入或点击选择文件")).toBeVisible();
+    const hiddenFileInput = page.locator('input[type="file"][accept*=".pdf"]');
+    await expect(hiddenFileInput).toBeAttached();
+
+    // "开始处理" button is disabled with no file + no typed name.
+    const startBtn = page.getByRole("button", { name: /开始处理/ });
+    await expect(startBtn).toBeDisabled();
+
+    // Typing a fallback filename enables it (legacy demo path).
+    await page.getByPlaceholder(/输入文件名/).fill("smoke-upload.pdf");
+    await expect(startBtn).toBeEnabled();
+  });
+
+  test("strategy canvas 进入下一轮 button switches to War Council tab", async ({ page }) => {
+    await page.locator(".sidebar__nav").getByText("战略工作台").click();
+    // Default lands on canvas tab for the seeded primary question.
+    await page.getByText("画布 (Spatial)").click();
+    const advanceBtn = page.getByRole("button", { name: /进入下一轮/ });
+    await expect(advanceBtn).toBeVisible();
+    await expect(advanceBtn).toBeEnabled();
+    await advanceBtn.click();
+    // After the click we expect to be on the War Council tab — its
+    // header pills appear.
+    await expect(page.getByRole("button", { name: /运行第 \d+ 轮/ })).toBeVisible();
+  });
 });
