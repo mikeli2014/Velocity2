@@ -13,7 +13,9 @@ test.describe("Velocity OS — smoke", () => {
     await expect(page.getByText("企业认知总览")).toBeVisible();
     await expect(page.getByText("战略对齐率")).toBeVisible();
     await expect(page.getByText("知识复用率")).toBeVisible();
-    await expect(page.getByText("项目健康度")).toBeVisible();
+    // "项目健康度" appears as the KPI label and inside "关键项目健康度"
+    // card title; pin to the exact KPI label.
+    await expect(page.getByText("项目健康度", { exact: true })).toBeVisible();
   });
 
   test("sidebar exposes every top-level nav item including Admin", async ({ page }) => {
@@ -54,7 +56,8 @@ test.describe("Velocity OS — smoke", () => {
     await page.locator(".sidebar__nav").getByText("工作流中心").click();
     await expect(page.getByRole("heading", { name: "工作流模板与执行" })).toBeVisible();
     await expect(page.getByText("创建设计简报").first()).toBeVisible();
-    await page.getByRole("button", { name: /运行记录/ }).click();
+    // The tabs are <div class="tab"> elements, not buttons.
+    await page.locator(".tab").getByText("运行记录").click();
     await expect(page.getByText("项目 — 全屋净水 2.0").first()).toBeVisible();
   });
 
@@ -77,22 +80,35 @@ test.describe("Velocity OS — smoke", () => {
     await expect(page.getByText(/审计日志/).first()).toBeVisible();
   });
 
-  test("nginx healthz endpoint returns ok", async ({ request, baseURL }) => {
-    test.skip(!baseURL?.startsWith("http"), "needs a real http base url");
+  // The next three specs target the unified Cloud Run container's
+  // production-only behavior (FastAPI healthz, SPA fallback for any
+  // path, immutable hashed assets). They do NOT make sense against
+  // `npm run dev` — Vite serves source modules instead of hashed
+  // bundles and proxies only /api/*. Skip whenever BASE_URL isn't set
+  // OR points at localhost.
+  function needsDeployedBackend(baseURL) {
+    return !process.env.BASE_URL
+        || !baseURL
+        || baseURL.includes("localhost")
+        || baseURL.includes("127.0.0.1");
+  }
+
+  test("healthz endpoint returns ok", async ({ request, baseURL }) => {
+    test.skip(needsDeployedBackend(baseURL), "needs a deployed prod build (set BASE_URL=https://...)");
     const res = await request.get("/healthz");
     expect(res.status()).toBe(200);
     expect((await res.text()).trim()).toBe("ok");
   });
 
   test("SPA fallback serves index.html for unknown deep links", async ({ request, baseURL }) => {
-    test.skip(!baseURL?.startsWith("http"), "needs a real http base url");
+    test.skip(needsDeployedBackend(baseURL), "needs a deployed prod build (set BASE_URL=https://...)");
     const res = await request.get("/some/random/deep-link");
     expect(res.status()).toBe(200);
     expect((await res.text()).toLowerCase()).toContain("<div id=\"root\">");
   });
 
   test("fingerprinted assets carry an immutable cache header", async ({ request, baseURL }) => {
-    test.skip(!baseURL?.startsWith("http"), "needs a real http base url");
+    test.skip(needsDeployedBackend(baseURL), "needs a deployed prod build (set BASE_URL=https://...)");
     const html = await (await request.get("/")).text();
     const m = html.match(/\/assets\/index-[^"\s]+\.js/);
     expect(m).not.toBeNull();

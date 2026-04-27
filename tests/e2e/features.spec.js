@@ -33,7 +33,9 @@ test.describe("Velocity OS — features", () => {
 
   test("project detail modal surfaces milestones and risks", async ({ page }) => {
     await page.locator(".sidebar__nav").getByText("OKR 与关键项目").click();
-    await page.getByText("关键项目组合").click();
+    // Click the projects tab specifically — the same string also appears
+    // in the page subtitle, so scope to the .tab class.
+    await page.locator(".tab").getByText("关键项目组合").click();
     await page.getByText("全屋净水 2.0").first().click();
     await expect(page.getByText("里程碑", { exact: false }).first()).toBeVisible();
     await expect(page.getByText(/参与人/)).toBeVisible();
@@ -79,10 +81,12 @@ test.describe("Velocity OS — features", () => {
   test("War Council renders seeded debate rounds + run-next-round button", async ({ page }) => {
     await page.locator(".sidebar__nav").getByText("战略工作台").click();
     await page.getByText("War Council").click();
-    // Seeded debate has rounds 1-3 on sq-1.
-    await expect(page.getByText("第 1 轮")).toBeVisible();
-    await expect(page.getByText("第 2 轮")).toBeVisible();
-    await expect(page.getByText("第 3 轮")).toBeVisible();
+    // Seeded debate has rounds 1-3 on sq-1. Match the round dividers
+    // (which include the Chinese subtitle) — the page header crumb
+    // also says "第 N 轮研讨" so plain "第 N 轮" is ambiguous.
+    await expect(page.getByText(/第 1 轮 · 首轮陈述/)).toBeVisible();
+    await expect(page.getByText(/第 2 轮 · 交叉质询/)).toBeVisible();
+    await expect(page.getByText(/第 3 轮 · 立场收敛/)).toBeVisible();
     // Run-next-round button is the 4th-round CTA.
     await expect(page.getByRole("button", { name: /运行第 4 轮/ })).toBeVisible();
     // Synthesis pill carries the live stance counts.
