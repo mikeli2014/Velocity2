@@ -63,7 +63,7 @@ export function StrategyPage({ setRoute }) {
             WarCouncil read DB-backed seeds; Options is persisted via
             POST /options/generate; StructuredOutput is ephemeral and
             generated on demand. */}
-        {tab === "canvas" && <StrategyCanvas question={question} />}
+        {tab === "canvas" && <StrategyCanvas question={question} onAdvanceToWar={() => setTab("war")} />}
         {tab === "war" && <WarCouncil question={question} />}
         {tab === "options" && <StrategyOptions question={question} />}
         {tab === "output" && <StructuredOutput question={question} setRoute={setRoute} />}
@@ -329,7 +329,7 @@ function CanvasPicker({ title, empty, items, onPick, onClose }) {
   );
 }
 
-function StrategyCanvas({ question }) {
+function StrategyCanvas({ question, onAdvanceToWar }) {
   // Defaults derive from the active question so the canvas works for any
   // strategy question, not just sq-1. Empty agent / context lists fall
   // back to "all 8 agents" / "first 3 source ids" so the layout has
@@ -502,7 +502,13 @@ function StrategyCanvas({ question }) {
           <CanvasToolbarButton title="重置画布" icon="RefreshCw" onClick={() => { setAgentIds((seedQuestion.agents && seedQuestion.agents.length > 0) ? seedQuestion.agents : Agents.map(a => a.id)); setContextIds((seedQuestion.context || []).slice(0, 3)); setPicker(null); }} />
           <CanvasToolbarButton title="清空画布" icon="X" onClick={() => { setAgentIds([]); setContextIds([]); setPicker(null); }} />
           <div style={{ width: 1, background: "rgba(255,255,255,0.1)", margin: "4px 4px" }} />
-          <button className="btn btn--primary btn--sm" style={{ padding: "0 12px" }} disabled={agentIds.length === 0}>
+          <button
+            className="btn btn--primary btn--sm"
+            style={{ padding: "0 12px" }}
+            disabled={agentIds.length === 0}
+            onClick={onAdvanceToWar}
+            title="切换到 War Council 标签运行多 Agent 辩论"
+          >
             <Icon.Sparkles size={13} /> 进入下一轮
           </button>
         </div>
