@@ -60,10 +60,11 @@ export function StrategyPage() {
 
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
         {tab === "registry" && <QuestionRegistry questions={questions} currentId={questionId} onSelect={(id) => { setQuestionId(id); setTab("canvas"); }} onNew={() => setCreating(true)} />}
-        {tab === "canvas" && (isPrimary ? <StrategyCanvas /> : <StrategyPlaceholder variant="canvas" onLaunchDebate={() => setTab("war")} />)}
-        {/* WarCouncil works for any question — it reads the API and lets you
-            run a fresh debate round. Canvas / Options / Output still hard-
-            code sq-1 layout, so those keep their placeholders. */}
+        {/* Canvas + WarCouncil work for any question now. Options / Output
+            still hardcode sq-1's specific deliverable content (3 named
+            options, FY26 conclusion paragraphs) — those keep their
+            placeholder until the LLM-generated path lands. */}
+        {tab === "canvas" && <StrategyCanvas question={question} />}
         {tab === "war" && <WarCouncil question={question} />}
         {tab === "options" && (isPrimary ? <StrategyOptions /> : <StrategyPlaceholder variant="options" onLaunchDebate={() => setTab("war")} />)}
         {tab === "output" && (isPrimary ? <StructuredOutput /> : <StrategyPlaceholder variant="output" onLaunchDebate={() => setTab("war")} />)}
@@ -359,10 +360,21 @@ function CanvasPicker({ title, empty, items, onPick, onClose }) {
   );
 }
 
-function StrategyCanvas() {
+function StrategyCanvas({ question }) {
+  // Defaults derive from the active question so the canvas works for any
+  // strategy question, not just sq-1. Empty agent / context lists fall
+  // back to "all 8 agents" / "first 3 source ids" so the layout has
+  // something to render — the user can edit further via the toolbar.
+  const seedQuestion = question || StrategyQuestion;
   const cx = 50, cy = 50;
-  const [agentIds, setAgentIds] = useState(() => Agents.map(a => a.id));
-  const [contextIds, setContextIds] = useState(() => StrategyQuestion.context.slice(0, 3));
+  const [agentIds, setAgentIds] = useState(() =>
+    (seedQuestion.agents && seedQuestion.agents.length > 0)
+      ? seedQuestion.agents
+      : Agents.map(a => a.id)
+  );
+  const [contextIds, setContextIds] = useState(() =>
+    (seedQuestion.context || []).slice(0, 3)
+  );
   const [picker, setPicker] = useState(null); // "agent" | "context" | null
 
   function placeOnRing(items, ringIndex, radiusY) {
@@ -409,9 +421,9 @@ function StrategyCanvas() {
           zIndex: 5
         }}>
           <div style={{ fontSize: 10, color: "#c4b5fd", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700, marginBottom: 8 }}>战略问题 · Mission</div>
-          <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.35, marginBottom: 12 }}>{StrategyQuestion.title}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.35, marginBottom: 12 }}>{seedQuestion.title}</div>
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.65)", lineHeight: 1.5 }}>
-            上下文已注入: {contextIds.length} 条公司知识 · {StrategyQuestion.okrs.length} 个 OKR · {agentIds.length} 个 Agent
+            上下文已注入: {contextIds.length} 条公司知识 · {(seedQuestion.okrs || []).length} 个 OKR · {agentIds.length} 个 Agent
           </div>
           <div className="row" style={{ marginTop: 14, gap: 8 }}>
             <span className="pill" style={{ background: "rgba(255,255,255,0.12)", color: "#fff" }}>第 3 轮</span>
@@ -518,7 +530,7 @@ function StrategyCanvas() {
         }}>
           <CanvasToolbarButton title="添加 Agent" icon="User" active={picker === "agent"} onClick={() => setPicker(picker === "agent" ? null : "agent")} />
           <CanvasToolbarButton title="添加背景资料" icon="FileText" active={picker === "context"} onClick={() => setPicker(picker === "context" ? null : "context")} />
-          <CanvasToolbarButton title="重置画布" icon="RefreshCw" onClick={() => { setAgentIds(Agents.map(a => a.id)); setContextIds(StrategyQuestion.context.slice(0, 3)); setPicker(null); }} />
+          <CanvasToolbarButton title="重置画布" icon="RefreshCw" onClick={() => { setAgentIds((seedQuestion.agents && seedQuestion.agents.length > 0) ? seedQuestion.agents : Agents.map(a => a.id)); setContextIds((seedQuestion.context || []).slice(0, 3)); setPicker(null); }} />
           <CanvasToolbarButton title="清空画布" icon="X" onClick={() => { setAgentIds([]); setContextIds([]); setPicker(null); }} />
           <div style={{ width: 1, background: "rgba(255,255,255,0.1)", margin: "4px 4px" }} />
           <button className="btn btn--primary btn--sm" style={{ padding: "0 12px" }} disabled={agentIds.length === 0}>
