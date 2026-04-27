@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Icon, KpiCard, Progress, HealthPill, Modal } from "../components/primitives.jsx";
 import { Company, KnowledgeSources as SeedKnowledgeSources, KnowledgeDomains as SeedKnowledgeDomains, Projects, DecisionsRich, IngestQueueItems, INGEST_STATES } from "../data/seed.js";
 import { useApi, apiPost, ApiError } from "../lib/api.js";
@@ -8,7 +8,18 @@ export function KnowledgePage() {
   const [filter, setFilter] = useState("all");
   const [viewing, setViewing] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [ingestItems, setIngestItems] = useState(() => IngestQueueItems.map(it => ({ ...it })));
+  // Ingest queue: prefer the API (so uploads from other sessions show
+  // up + items survive reload), seed fallback when offline. Optimistic
+  // local edits via pushIngestItem keep the UI snappy during the
+  // staged upload animation.
+  const { data: apiIngest, refresh: refreshIngest } = useApi("/api/v1/ingest-queue");
+  const baseIngest = apiIngest ?? IngestQueueItems;
+  const [ingestItems, setIngestItems] = useState(baseIngest);
+  const lastIngestRef = useRef(apiIngest);
+  if (apiIngest && apiIngest !== lastIngestRef.current) {
+    lastIngestRef.current = apiIngest;
+    setIngestItems(apiIngest);
+  }
 
   // Phase 2 step 1: knowledge sources come from the FastAPI backend.
   // When the API isn't reachable (dev without backend running, or initial
@@ -176,7 +187,7 @@ export function KnowledgePage() {
         <KnowledgeUploadFlow
           mode={uploading.mode}
           onClose={() => setUploading(false)}
-          onComplete={(item) => { pushIngestItem(item); setTab("ingest"); }}
+          onComplete={(item) => { pushIngestItem(item); refreshIngest(); setTab("ingest"); }}
         />
       )}
     </div>
@@ -308,11 +319,86 @@ function KnowledgeUploadFlow({ mode, onClose, onComplete }) {
   const [scope, setScope] = useState("公司");
   const [domain, setDomain] = useState(SeedKnowledgeDomains[0].id);
   const [running, setRunning] = useState(false);
+  // File picker / drag-drop state. We capture the File object so the
+  // real backend pipeline (Phase 3) can POST it; for now we just send
+  // metadata to /api/v1/ingest-queue so the row persists across reloads.
+  const [file, setFile] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef(null);
   const finished = stage >= UPLOAD_STAGES.length;
 
-  function start() {
+  function pickFile() {
+    fileInputRef.current?.click();
+  }
+
+  function adoptFile(f) {
+    if (!f) return;
+    setFile(f);
+    if (!title || title === "https://") setTitle(f.name);
+  }
+
+  function onDrop(e) {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer?.files?.[0];
+    adoptFile(f);
+  }
+
+  function detectType() {
+    if (mode === "url") return "URL";
+    const lower = (file?.name || title).toLowerCase();
+    if (lower.endsWith(".pdf")) return "PDF";
+    if (lower.endsWith(".docx") || lower.endsWith(".doc")) return "DOC";
+    if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) return "XLSX";
+    if (lower.endsWith(".pptx") || lower.endsWith(".ppt")) return "PPT";
+    if (lower.endsWith(".txt") || lower.endsWith(".md")) return "TXT";
+    return "FILE";
+  }
+
+  function fmtSize(bytes) {
+    if (!bytes) return "—";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  async function start() {
     setRunning(true);
     setStage(0);
+
+    // Build the queue item payload up-front so we can POST + animate
+    // in parallel. The detected type / size come from the picked File
+    // when present, falling back to the typed name.
+    const detectedDomain = SeedKnowledgeDomains.find(d => d.id === domain);
+    const payload = {
+      name: file?.name || title.trim() || "(未命名)",
+      type: detectType(),
+      size: file ? fmtSize(file.size) : "—",
+      state: "fetching",
+      progress: 5,
+      scope,
+      owner: "当前用户"
+    };
+
+    // Persist to the backend so the item survives reload + appears in
+    // any other browser session. Soft-fall to local-only if the API
+    // is unreachable.
+    let createdItem = null;
+    try {
+      createdItem = await apiPost("/api/v1/ingest-queue", payload);
+    } catch (err) {
+      console.warn("[velocity] ingest-queue POST failed; using local-only", err);
+      createdItem = {
+        ...payload,
+        id: `iq-${Date.now().toString(36)}`,
+        uploaded: "刚刚",
+        error: null
+      };
+    }
+
+    // Step animation — purely visual, the backend item is already at
+    // state=fetching. The UI walks through fetching → parsing → tag →
+    // embed → review for verisimilitude.
     let i = 0;
     const tick = () => {
       i += 1;
@@ -321,27 +407,13 @@ function KnowledgeUploadFlow({ mode, onClose, onComplete }) {
       else {
         setRunning(false);
         if (onComplete) {
-          const detectedDomain = SeedKnowledgeDomains.find(d => d.id === domain);
-          // Detect type from filename extension or url
-          const lower = title.toLowerCase();
-          const t = mode === "url" ? "URL"
-            : lower.endsWith(".pdf") ? "PDF"
-            : lower.endsWith(".docx") || lower.endsWith(".doc") ? "DOC"
-            : lower.endsWith(".xlsx") || lower.endsWith(".xls") ? "XLSX"
-            : lower.endsWith(".pptx") || lower.endsWith(".ppt") ? "PPT"
-            : lower.endsWith(".txt") || lower.endsWith(".md") ? "TXT"
-            : "FILE";
           onComplete({
-            id: `iq-${Date.now().toString(36)}`,
-            name: title.trim() || "(未命名)",
-            type: t,
-            size: "—",
+            ...createdItem,
+            // Frontend ingest list expects state=review at the end of
+            // the simulated pipeline; the real backend stays at the
+            // initial state until an operator approves.
             state: "review",
             progress: 100,
-            scope,
-            owner: "当前用户",
-            uploaded: "刚刚",
-            error: null,
             domain: detectedDomain?.name
           });
         }
@@ -361,8 +433,8 @@ function KnowledgeUploadFlow({ mode, onClose, onComplete }) {
         {!finished && (
           <button
             className="btn btn--primary btn--sm"
-            disabled={running || !title.trim()}
-            style={(running || !title.trim()) ? { opacity: 0.5, cursor: "not-allowed" } : {}}
+            disabled={running || (!file && !title.trim())}
+            style={(running || (!file && !title.trim())) ? { opacity: 0.5, cursor: "not-allowed" } : {}}
             onClick={start}
           >
             <Icon.PlayCircle size={13} /> {running ? "处理中…" : "开始处理"}
@@ -377,18 +449,58 @@ function KnowledgeUploadFlow({ mode, onClose, onComplete }) {
             {mode === "url"
               ? <input className="input" value={title} onChange={e => setTitle(e.target.value)} placeholder="https://aowei.com/report/2026q1" />
               : (
-                <div style={{ border: "2px dashed var(--border)", borderRadius: 10, padding: 28, textAlign: "center", color: "var(--fg3)" }}>
-                  <Icon.Upload size={28} style={{ margin: "0 auto 8px", color: "var(--fg4)" }} />
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg2)" }}>拖入或点击选择文件</div>
-                  <div style={{ fontSize: 11, color: "var(--fg4)", marginTop: 4 }}>支持 PDF / DOCX / PPTX / XLSX / TXT / MD / 图集</div>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={pickFile}
+                  onKeyDown={e => (e.key === "Enter" || e.key === " ") && pickFile()}
+                  onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={onDrop}
+                  style={{
+                    border: "2px dashed " + (dragOver ? "var(--vel-indigo)" : "var(--border)"),
+                    background: dragOver ? "var(--vel-indigo-50)" : "transparent",
+                    borderRadius: 10,
+                    padding: 28,
+                    textAlign: "center",
+                    color: "var(--fg3)",
+                    cursor: "pointer",
+                    transition: "background 0.15s, border-color 0.15s"
+                  }}
+                >
                   <input
-                    type="text"
-                    placeholder="或输入文件名(模拟)"
-                    className="input"
-                    style={{ marginTop: 12, maxWidth: 320 }}
-                    value={title}
-                    onChange={e => setTitle(e.target.value)}
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.txt,.md"
+                    style={{ display: "none" }}
+                    onChange={e => adoptFile(e.target.files?.[0])}
                   />
+                  {file ? (
+                    <>
+                      <Icon.FileText size={28} style={{ margin: "0 auto 8px", color: "var(--vel-indigo)" }} />
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--fg1)" }}>{file.name}</div>
+                      <div style={{ fontSize: 11, color: "var(--fg3)", marginTop: 4 }}>
+                        {fmtSize(file.size)} · {detectType()}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--vel-indigo)", marginTop: 6 }}>点击或拖入替换</div>
+                    </>
+                  ) : (
+                    <>
+                      <Icon.Upload size={28} style={{ margin: "0 auto 8px", color: "var(--fg4)" }} />
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg2)" }}>拖入或点击选择文件</div>
+                      <div style={{ fontSize: 11, color: "var(--fg4)", marginTop: 4 }}>支持 PDF / DOCX / PPTX / XLSX / TXT / MD</div>
+                      <div style={{ fontSize: 11, color: "var(--fg4)", marginTop: 10 }}>—— 或 ——</div>
+                      <input
+                        type="text"
+                        placeholder="输入文件名(无文件时模拟入队)"
+                        className="input"
+                        style={{ marginTop: 8, maxWidth: 320 }}
+                        value={title}
+                        onChange={e => setTitle(e.target.value)}
+                        onClick={e => e.stopPropagation()}
+                      />
+                    </>
+                  )}
                 </div>
               )}
           </div>
