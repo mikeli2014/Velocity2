@@ -93,11 +93,17 @@ test.describe("Velocity OS — smoke", () => {
         || baseURL.includes("127.0.0.1");
   }
 
-  test("healthz endpoint returns ok", async ({ request, baseURL }) => {
+  test("health endpoint returns ok", async ({ request, baseURL }) => {
     test.skip(needsDeployedBackend(baseURL), "needs a deployed prod build (set BASE_URL=https://...)");
-    const res = await request.get("/healthz");
+    // Use /api/v1/health (FastAPI JSON), NOT bare /healthz — Cloud Run's
+    // legacy *-{project}-{region}.run.app frontend reserves /healthz
+    // for its own probe infrastructure and returns Google's 404 page
+    // before the request reaches our service. /api/v1/health is the
+    // canonical app-level health endpoint and is unaffected.
+    const res = await request.get("/api/v1/health");
     expect(res.status()).toBe(200);
-    expect((await res.text()).trim()).toBe("ok");
+    const body = await res.json();
+    expect(body.status).toBe("ok");
   });
 
   test("SPA fallback serves index.html for unknown deep links", async ({ request, baseURL }) => {
