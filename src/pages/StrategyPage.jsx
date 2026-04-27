@@ -3,7 +3,7 @@ import { Icon, Modal, makeId } from "../components/primitives.jsx";
 import { StrategyQuestion, StrategyQuestions, STRATEGY_STATUSES, Agents, DebateMessages as SeedDebateMessages, KnowledgeSources, Objectives } from "../data/seed.js";
 import { useApi, apiPost, apiStream, ApiError } from "../lib/api.js";
 
-export function StrategyPage() {
+export function StrategyPage({ setRoute }) {
   const [tab, setTab] = useState("canvas");
   const [questions, setQuestions] = useState(() => StrategyQuestions.map(q => ({ ...q })));
   const [questionId, setQuestionId] = useState(StrategyQuestion.id);
@@ -66,7 +66,7 @@ export function StrategyPage() {
         {tab === "canvas" && <StrategyCanvas question={question} />}
         {tab === "war" && <WarCouncil question={question} />}
         {tab === "options" && <StrategyOptions question={question} />}
-        {tab === "output" && <StructuredOutput question={question} />}
+        {tab === "output" && <StructuredOutput question={question} setRoute={setRoute} />}
       </div>
 
       {creating && (
@@ -872,18 +872,24 @@ function StrategyOptions({ question }) {
   );
 }
 
-function StructuredOutput({ question }) {
+function StructuredOutput({ question, setRoute }) {
   const questionId = question.id;
   // Ephemeral by design — frontend caches the draft locally, user
   // "applies" via the existing CRUD endpoints when ready.
   const [draft, setDraft] = useState(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState(null);
+  // Track which slices of the draft have been written. Each entry is
+  // a stable kind: "objective" | "projects" | "decision". Once applied
+  // the corresponding button shows ✓ 已写入 and is disabled.
+  const [applied, setApplied] = useState(new Set());
+  const [applying, setApplying] = useState(null); // kind currently being persisted
 
   async function generate() {
     if (running) return;
     setRunning(true);
     setError(null);
+    setApplied(new Set());
     try {
       const res = await apiPost(`/api/v1/strategy-questions/${questionId}/structured-output/generate`, {});
       setDraft(res);
@@ -891,6 +897,87 @@ function StructuredOutput({ question }) {
       setError(err instanceof ApiError ? err.detail : String(err));
     } finally {
       setRunning(false);
+    }
+  }
+
+  // Apply slices of the LLM draft to real persisted rows. Each path
+  // POSTs to the existing CRUD endpoint and tags the slice as applied
+  // so the user doesn't double-create. Errors set the global error
+  // banner (sufficient for the demo — not production undo/redo).
+  async function applyObjective() {
+    if (!draft || applying) return;
+    setApplying("objective");
+    setError(null);
+    try {
+      await apiPost("/api/v1/objectives", {
+        code: draft.objective.code,
+        title: draft.objective.title,
+        owner: question.asker || "陈志远",
+        quarter: "FY26",
+        status: "on-track",
+        krs: (draft.objective.krs || []).map(k => ({
+          title: k.kr,
+          target: k.target,
+          progress: 0,
+          status: "on-track"
+        })),
+        linkedProjects: []
+      });
+      setApplied(s => new Set(s).add("objective"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : String(err));
+    } finally {
+      setApplying(null);
+    }
+  }
+
+  async function applyProjects() {
+    if (!draft || applying || !(draft.projects || []).length) return;
+    setApplying("projects");
+    setError(null);
+    try {
+      for (const p of draft.projects) {
+        await apiPost("/api/v1/projects", {
+          name: p.name,
+          health: "ok",
+          progress: 0,
+          owner: p.owner,
+          okr: draft.objective.code,
+          milestone: p.milestone,
+          due: "2026-12-31"
+        });
+      }
+      setApplied(s => new Set(s).add("projects"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : String(err));
+    } finally {
+      setApplying(null);
+    }
+  }
+
+  async function applyDecision() {
+    if (!draft || applying) return;
+    setApplying("decision");
+    setError(null);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      await apiPost("/api/v1/decisions", {
+        title: draft.decision.conclusion.slice(0, 60) || question.title,
+        question: draft.decision.question,
+        conclusion: draft.decision.conclusion,
+        date: today,
+        owner: question.asker || "陈志远",
+        status: "decided",
+        linkedQuestion: question.id,
+        assumptions: draft.decision.assumptions || [],
+        dissent: (draft.decision.dissent || []).map(t => ({ note: t })),
+        evidenceSources: []
+      });
+      setApplied(s => new Set(s).add("decision"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : String(err));
+    } finally {
+      setApplying(null);
     }
   }
 
@@ -949,7 +1036,22 @@ function StructuredOutput({ question }) {
                   ))}
                 </div>
               </div>
-              <div style={{ fontSize: 11, color: "var(--fg4)" }}>提示:点击「编辑后发布」可在 OKR 注册表中调整后再正式写入。</div>
+              <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
+                <button
+                  className={`btn btn--sm ${applied.has("objective") ? "btn--ghost" : "btn--primary"}`}
+                  onClick={applyObjective}
+                  disabled={!!applying || applied.has("objective")}
+                >
+                  {applied.has("objective")
+                    ? <><Icon.Check size={13} /> 已写入 OKR</>
+                    : <><Icon.Plus size={13} /> {applying === "objective" ? "写入中…" : "写入 OKR 注册表"}</>}
+                </button>
+                {applied.has("objective") && setRoute && (
+                  <button className="btn btn--ghost btn--sm" onClick={() => setRoute({ page: "okr" })}>
+                    打开 OKR 页面 →
+                  </button>
+                )}
+              </div>
             </div>
 
             {(draft.projects || []).length > 0 && (
@@ -971,6 +1073,17 @@ function StructuredOutput({ question }) {
                     </div>
                   </div>
                 ))}
+                <div className="row" style={{ gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+                  <button
+                    className={`btn btn--sm ${applied.has("projects") ? "btn--ghost" : "btn--primary"}`}
+                    onClick={applyProjects}
+                    disabled={!!applying || applied.has("projects")}
+                  >
+                    {applied.has("projects")
+                      ? <><Icon.Check size={13} /> 已写入 {draft.projects.length} 个项目</>
+                      : <><Icon.Plus size={13} /> {applying === "projects" ? "写入中…" : `写入 ${draft.projects.length} 个项目`}</>}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -979,7 +1092,7 @@ function StructuredOutput({ question }) {
                 <Icon.Quote size={18} style={{ color: "#7c3aed" }} />
                 <div style={{ fontSize: 16, fontWeight: 800, color: "var(--fg1)" }}>决策日志条目 (草案)</div>
               </div>
-              <div style={{ fontSize: 13, color: "var(--fg2)", lineHeight: 1.7 }}>
+              <div style={{ fontSize: 13, color: "var(--fg2)", lineHeight: 1.7, marginBottom: 14 }}>
                 <p><strong style={{ color: "var(--fg1)" }}>问题:</strong> {draft.decision.question}</p>
                 <p><strong style={{ color: "var(--fg1)" }}>结论:</strong> {draft.decision.conclusion}</p>
                 {(draft.decision.assumptions || []).length > 0 && (
@@ -991,6 +1104,17 @@ function StructuredOutput({ question }) {
                 {draft.decision.evidence && (
                   <p><strong style={{ color: "var(--fg1)" }}>证据来源:</strong> {draft.decision.evidence}</p>
                 )}
+              </div>
+              <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
+                <button
+                  className={`btn btn--sm ${applied.has("decision") ? "btn--ghost" : "btn--primary"}`}
+                  onClick={applyDecision}
+                  disabled={!!applying || applied.has("decision")}
+                >
+                  {applied.has("decision")
+                    ? <><Icon.Check size={13} /> 已写入决策日志</>
+                    : <><Icon.Plus size={13} /> {applying === "decision" ? "写入中…" : "写入决策日志"}</>}
+                </button>
               </div>
             </div>
           </>

@@ -18,9 +18,42 @@ function activityRoute(a) {
     case "strategy":  return { page: "strategy" };
     case "assistant": return { page: "assistants" };
     case "knowledge": return { page: "knowledge" };
+    case "decision":  return { page: "okr" };
+    case "routing":   return { page: "assistants" };
     case "view":      return { page: "okr" };
     default:          return null;
   }
+}
+
+// Map an audit event row to the activity-feed shape so the homepage
+// card can render real edits (POST /objectives, knowledge approve,
+// rule toggle, etc.) alongside or instead of the seeded sample feed.
+function auditToActivity(e) {
+  const verbByAction = (action) => {
+    if (!action) return "做了一次操作";
+    // Strip noun suffix to leave the verb: "新增项目" → "新增了"
+    if (action.startsWith("新增")) return "新增了";
+    if (action.startsWith("更新")) return "更新了";
+    if (action.startsWith("删除")) return "删除了";
+    if (action.startsWith("启用")) return "启用了";
+    if (action.startsWith("停用")) return "停用了";
+    if (action.includes("入库")) return "入库了";
+    return action;
+  };
+  const nounByCategory = {
+    project: "项目", decision: "决策", knowledge: "知识源",
+    routing: "路由规则"
+  };
+  const noun = nounByCategory[e.category] || e.category || "";
+  return {
+    id: `audit-${e.id}`,
+    who: e.actor || "系统",
+    what: `${verbByAction(e.action)}${noun}`,
+    target: e.target || "—",
+    when: e.at || "刚刚",
+    type: e.category,
+    _link: e.link  // direct deep-link if the audit row carries one
+  };
 }
 
 export function HomePage({ setRoute }) {
@@ -28,7 +61,17 @@ export function HomePage({ setRoute }) {
   // bundled seed when the endpoint isn't reachable.
   const Objectives    = useApi("/api/v1/objectives").data        ?? SeedObjectives;
   const Projects      = useApi("/api/v1/projects").data          ?? SeedProjects;
-  const Activity      = useApi("/api/v1/activity").data          ?? SeedActivity;
+  const SeedActivityRows = useApi("/api/v1/activity").data       ?? SeedActivity;
+  // Mirror the most recent audit events into the activity feed so
+  // operational edits (CRUD writes, ingest approvals, rule toggles)
+  // surface alongside the seeded sample. Order: live audit first
+  // (newest), then seed activity backfill, capped to 8 rows.
+  const auditRows     = useApi("/api/v1/audit-log?limit=8").data || [];
+  const Activity = (() => {
+    const live = auditRows.slice(0, 6).map(auditToActivity);
+    const merged = live.concat(SeedActivityRows);
+    return merged.slice(0, 8);
+  })();
   const Departments   = useApi("/api/v1/departments").data       ?? SeedDepartments;
   const Agents        = useApi("/api/v1/agents").data            ?? SeedAgents;
   // The "strategy debate teaser" wants a single in-debate question. Pick
@@ -205,7 +248,10 @@ export function HomePage({ setRoute }) {
             </div>
             <div style={{ padding: "6px 0" }}>
               {Activity.map((a, i) => {
-                const route = activityRoute(a);
+                // Audit rows already carry a precise deep-link in `_link`
+                // ({page, projectId, ruleId, …}); fall back to the
+                // category-based router for seeded entries.
+                const route = a._link || activityRoute(a);
                 return (
                   <div key={a.id} onClick={() => route && setRoute(route)}
                     style={{

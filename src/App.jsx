@@ -34,7 +34,7 @@ function renderPage(route, setRoute) {
   switch (route.page) {
     case "home": return <HomePage setRoute={setRoute} />;
     case "knowledge": return <KnowledgePage />;
-    case "strategy": return <StrategyPage />;
+    case "strategy": return <StrategyPage setRoute={setRoute} />;
     case "okr": return <OkrPage />;
     case "departments": return <DepartmentsIndex setRoute={setRoute} />;
     case "department": return <DepartmentPage deptId={route.deptId || "industrial-design"} setRoute={setRoute} />;
