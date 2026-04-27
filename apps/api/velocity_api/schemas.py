@@ -573,6 +573,52 @@ class DebateSynthesisOut(_CamelModel):
     model: str
 
 
+# --- Strategy options + structured output ------------------------------
+
+
+class StrategyOptionOut(_CamelModel):
+    id: str
+    question_id: str
+    idx: int
+    name: str
+    description: str | None = None
+    roi: str | None = None
+    risk: str | None = None
+    time_estimate: str | None = None
+    pros: int = 0
+    cons: int = 0
+    recommended: bool = False
+    model: str | None = None
+
+
+class StructuredOutputObjectiveDraft(_CamelModel):
+    code: str
+    title: str
+    krs: list[dict[str, str]] = Field(default_factory=list)  # [{kr, target}]
+
+
+class StructuredOutputProjectDraft(_CamelModel):
+    name: str
+    owner: str | None = None
+    milestone: str | None = None
+
+
+class StructuredOutputDecisionDraft(_CamelModel):
+    question: str
+    conclusion: str
+    assumptions: list[str] = Field(default_factory=list)
+    dissent: list[str] = Field(default_factory=list)
+    evidence: str | None = None
+
+
+class StructuredOutputDraft(_CamelModel):
+    objective: StructuredOutputObjectiveDraft
+    projects: list[StructuredOutputProjectDraft] = Field(default_factory=list)
+    decision: StructuredOutputDecisionDraft
+    recommended_option_id: str | None = None
+    model: str
+
+
 # --- Routing classifier (Haiku) ----------------------------------------
 
 

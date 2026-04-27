@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Icon, Modal, makeId } from "../components/primitives.jsx";
 import { StrategyQuestion, StrategyQuestions, STRATEGY_STATUSES, Agents, DebateMessages as SeedDebateMessages, KnowledgeSources, Objectives } from "../data/seed.js";
-import { useApi, apiStream, ApiError } from "../lib/api.js";
+import { useApi, apiPost, apiStream, ApiError } from "../lib/api.js";
 
 export function StrategyPage() {
   const [tab, setTab] = useState("canvas");
@@ -15,7 +15,6 @@ export function StrategyPage() {
     : question.status === "draft"
       ? `战略工作台 · 草稿`
       : `战略工作台 · 第 ${question.rounds || 1} 轮研讨`;
-  const isPrimary = question.id === StrategyQuestion.id; // we have full canvas/war for the seeded one
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - var(--header-h))" }}>
@@ -60,14 +59,14 @@ export function StrategyPage() {
 
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
         {tab === "registry" && <QuestionRegistry questions={questions} currentId={questionId} onSelect={(id) => { setQuestionId(id); setTab("canvas"); }} onNew={() => setCreating(true)} />}
-        {/* Canvas + WarCouncil work for any question now. Options / Output
-            still hardcode sq-1's specific deliverable content (3 named
-            options, FY26 conclusion paragraphs) — those keep their
-            placeholder until the LLM-generated path lands. */}
+        {/* All four panels now work for any strategy question. Canvas +
+            WarCouncil read DB-backed seeds; Options is persisted via
+            POST /options/generate; StructuredOutput is ephemeral and
+            generated on demand. */}
         {tab === "canvas" && <StrategyCanvas question={question} />}
         {tab === "war" && <WarCouncil question={question} />}
-        {tab === "options" && (isPrimary ? <StrategyOptions /> : <StrategyPlaceholder variant="options" onLaunchDebate={() => setTab("war")} />)}
-        {tab === "output" && (isPrimary ? <StructuredOutput /> : <StrategyPlaceholder variant="output" onLaunchDebate={() => setTab("war")} />)}
+        {tab === "options" && <StrategyOptions question={question} />}
+        {tab === "output" && <StructuredOutput question={question} />}
       </div>
 
       {creating && (
@@ -255,36 +254,6 @@ function QuestionRegistry({ questions, currentId, onSelect, onNew }) {
             </div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function StrategyPlaceholder({ variant, onLaunchDebate }) {
-  const map = {
-    canvas: { title: "尚未生成研讨画布", body: "Canvas 画布仍按 sq-1 演示数据布局。点击下方启动多 Agent 研讨进入 War Council 进行真实辩论。" },
-    war: { title: "尚无 War Council 记录", body: "本问题尚未运行多轮研讨。启动后可查看每位 Agent 的赞成 / 反对 / 保留立场和证据来源。" },
-    options: { title: "尚未生成战略选项", body: "完成至少一轮研讨后,Velocity 会基于不同假设生成 2-3 个候选方案供管理层比较。" },
-    output: { title: "尚未生成结构化输出", body: "决议确认后,Velocity 会自动生成 Objective / KR / 关键项目草案与决策日志条目。" }
-  };
-  const c = map[variant] || map.canvas;
-  return (
-    <div className="scroll" style={{ height: "100%", overflow: "auto", padding: 32, background: "var(--bg-page)" }}>
-      <div style={{ maxWidth: 720, margin: "60px auto 0" }}>
-        <div className="card" style={{ padding: 36, textAlign: "center" }}>
-          <Icon.Compass size={36} style={{ color: "var(--fg4)", margin: "0 auto 12px" }} />
-          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--fg1)", marginBottom: 6 }}>{c.title}</div>
-          <div style={{ fontSize: 13, color: "var(--fg3)", lineHeight: 1.6, marginBottom: 18 }}>{c.body}</div>
-          <div className="row" style={{ gap: 8, justifyContent: "center" }}>
-            <button
-              className="btn btn--primary btn--sm"
-              onClick={onLaunchDebate}
-              disabled={!onLaunchDebate}
-            >
-              <Icon.Sparkles size={13} /> 启动多 Agent 研讨
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -812,117 +781,220 @@ function WarCouncil({ question }) {
   );
 }
 
-function StrategyOptions() {
-  const opts = [
-    { name: "选项 A · 激进切换", desc: "DTC 占比 Q4 达到 35%,以全屋净水套系为核心 SKU。", roi: "高", risk: "高", time: "Q2 启动 / Q4 见效", pros: 3, cons: 2 },
-    { name: "选项 B · 稳健并行", desc: "DTC 占比 22%,保留线下,2 城试点县域服务网络。", roi: "中", risk: "中", time: "Q2 试点 / Q3 复制", pros: 5, cons: 1, recommended: true },
-    { name: "选项 C · 渐进观望", desc: "维持现状 13%,先稳固 BP/SC/SA 三角协同。", roi: "低", risk: "低", time: "Q3 评估", pros: 2, cons: 3 }
-  ];
+function StrategyOptions({ question }) {
+  const questionId = question.id;
+  const { data: apiOptions, refresh } = useApi(`/api/v1/strategy-questions/${questionId}/options`);
+  const options = apiOptions ?? [];
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function generate() {
+    if (running) return;
+    setRunning(true);
+    setError(null);
+    try {
+      await apiPost(`/api/v1/strategy-questions/${questionId}/options/generate`, {});
+      refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : String(err));
+    } finally {
+      setRunning(false);
+    }
+  }
+
   return (
     <div className="scroll" style={{ height: "100%", overflow: "auto", padding: 32, background: "var(--bg-page)" }}>
-      <div className="grid grid-cols-3" style={{ maxWidth: 1200, margin: "0 auto" }}>
-        {opts.map((o, i) => (
-          <div key={i} className="card" style={{
-            padding: 22,
-            border: o.recommended ? "2px solid var(--vel-indigo)" : "1px solid var(--border-soft)",
-            position: "relative"
-          }}>
-            {o.recommended && <span className="pill pill--indigo" style={{ position: "absolute", top: -10, left: 18 }}>⭐ 推荐方案</span>}
-            <div style={{ fontSize: 11, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 6 }}>战略选项</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: "var(--fg1)", marginBottom: 8 }}>{o.name}</div>
-            <div style={{ fontSize: 13, color: "var(--fg2)", lineHeight: 1.6, marginBottom: 16 }}>{o.desc}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-              <div style={{ padding: "8px 10px", background: "var(--slate-50)", borderRadius: 6 }}>
-                <div style={{ fontSize: 10, color: "var(--fg3)", textTransform: "uppercase" }}>ROI</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)" }}>{o.roi}</div>
-              </div>
-              <div style={{ padding: "8px 10px", background: "var(--slate-50)", borderRadius: 6 }}>
-                <div style={{ fontSize: 10, color: "var(--fg3)", textTransform: "uppercase" }}>风险</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: o.risk === "高" ? "var(--danger-text)" : o.risk === "中" ? "var(--warning-text)" : "var(--success-text)" }}>{o.risk}</div>
-              </div>
-            </div>
-            <div style={{ fontSize: 12, color: "var(--fg3)", marginBottom: 10 }}>{o.time}</div>
-            <div className="row" style={{ gap: 12, marginBottom: 14 }}>
-              <span className="pill pill--ok">+{o.pros} 赞成</span>
-              <span className="pill pill--danger">-{o.cons} 反对</span>
-            </div>
-            <button className={`btn ${o.recommended ? 'btn--primary' : 'btn--ghost'} btn--sm`} style={{ width: "100%", justifyContent: "center" }}>
-              {o.recommended ? "选定此方案 →" : "查看详细分析"}
-            </button>
+      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: 18 }}>
+          <div style={{ fontSize: 12, color: "var(--fg3)" }}>
+            {options.length === 0
+              ? "尚未生成战略选项"
+              : `共 ${options.length} 个候选方案 · 由 ${options[0]?.model || "Sonnet 4.6"} 基于研讨综合生成`}
           </div>
-        ))}
+          <button
+            className="btn btn--primary btn--sm"
+            onClick={generate}
+            disabled={running}
+          >
+            <Icon.Sparkles size={13} /> {running ? "生成中…" : (options.length === 0 ? "生成战略选项" : "重新生成")}
+          </button>
+        </div>
+        {error && (
+          <div style={{ marginBottom: 16, padding: "10px 14px", background: "var(--danger-bg)", border: "1px solid var(--danger-border)", borderRadius: 8, color: "var(--danger-text)", fontSize: 12 }}>
+            {error === "anthropic_not_configured"
+              ? "未配置 ANTHROPIC_API_KEY:无法生成战略选项。"
+              : error === "options_parse_failed"
+                ? "模型返回的内容无法解析,请重试。"
+                : `请求失败:${error}`}
+          </div>
+        )}
+        {options.length === 0 ? (
+          <div style={{ padding: "48px 24px", background: "var(--slate-50)", border: "1px dashed var(--border)", borderRadius: 12, textAlign: "center" }}>
+            <Icon.Compass size={28} style={{ color: "var(--fg4)", marginBottom: 10 }} />
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)", marginBottom: 6 }}>本问题尚未生成战略选项</div>
+            <div style={{ fontSize: 12, color: "var(--fg3)", lineHeight: 1.6 }}>
+              点击右上角「生成战略选项」让 Sonnet 4.6 基于研讨记录综合 2-3 个候选方案。
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3">
+            {options.map((o, i) => (
+              <div key={o.id || i} className="card" style={{
+                padding: 22,
+                border: o.recommended ? "2px solid var(--vel-indigo)" : "1px solid var(--border-soft)",
+                position: "relative"
+              }}>
+                {o.recommended && <span className="pill pill--indigo" style={{ position: "absolute", top: -10, left: 18 }}>⭐ 推荐方案</span>}
+                <div style={{ fontSize: 11, color: "var(--fg3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 6 }}>战略选项</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "var(--fg1)", marginBottom: 8 }}>{o.name}</div>
+                <div style={{ fontSize: 13, color: "var(--fg2)", lineHeight: 1.6, marginBottom: 16 }}>{o.description}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+                  <div style={{ padding: "8px 10px", background: "var(--slate-50)", borderRadius: 6 }}>
+                    <div style={{ fontSize: 10, color: "var(--fg3)", textTransform: "uppercase" }}>ROI</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)" }}>{o.roi || "—"}</div>
+                  </div>
+                  <div style={{ padding: "8px 10px", background: "var(--slate-50)", borderRadius: 6 }}>
+                    <div style={{ fontSize: 10, color: "var(--fg3)", textTransform: "uppercase" }}>风险</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: o.risk === "高" ? "var(--danger-text)" : o.risk === "中" ? "var(--warning-text)" : "var(--success-text)" }}>{o.risk || "—"}</div>
+                  </div>
+                </div>
+                {o.timeEstimate && <div style={{ fontSize: 12, color: "var(--fg3)", marginBottom: 10 }}>{o.timeEstimate}</div>}
+                <div className="row" style={{ gap: 12, marginBottom: 14 }}>
+                  <span className="pill pill--ok">+{o.pros || 0} 赞成</span>
+                  <span className="pill pill--danger">-{o.cons || 0} 反对</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function StructuredOutput() {
+function StructuredOutput({ question }) {
+  const questionId = question.id;
+  // Ephemeral by design — frontend caches the draft locally, user
+  // "applies" via the existing CRUD endpoints when ready.
+  const [draft, setDraft] = useState(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function generate() {
+    if (running) return;
+    setRunning(true);
+    setError(null);
+    try {
+      const res = await apiPost(`/api/v1/strategy-questions/${questionId}/structured-output/generate`, {});
+      setDraft(res);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : String(err));
+    } finally {
+      setRunning(false);
+    }
+  }
+
   return (
     <div className="scroll" style={{ height: "100%", overflow: "auto", padding: 32, background: "var(--bg-page)" }}>
       <div style={{ maxWidth: 980, margin: "0 auto" }}>
-        <div className="card" style={{ padding: 24, marginBottom: 16 }}>
-          <div className="row" style={{ gap: 10, marginBottom: 16 }}>
-            <Icon.Target size={18} style={{ color: "var(--vel-indigo)" }} />
-            <div style={{ fontSize: 16, fontWeight: 800, color: "var(--fg1)" }}>建议生成 Objective (草案)</div>
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: 18 }}>
+          <div style={{ fontSize: 12, color: "var(--fg3)" }}>
+            {draft
+              ? `由 ${draft.model || "Sonnet 4.6"} 基于研讨综合生成 · 草案 (尚未写入 OKR / 项目)`
+              : "尚未生成结构化输出"}
           </div>
-          <div style={{ background: "var(--vel-indigo-50)", border: "1px solid var(--vel-indigo-100)", borderRadius: 10, padding: 18, marginBottom: 14 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--vel-indigo-700)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>O5 · DTC 渠道增长</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--fg1)", marginBottom: 12 }}>FY26 把线上 DTC 打造为全屋净水套系的主力增长引擎</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {[
-                { kr: "KR1 · 线上 DTC 占比", target: "≥ 22%" },
-                { kr: "KR2 · 全屋净水套系客单价", target: "≥ ¥18,000" },
-                { kr: "KR3 · 县域服务履约率 NPS", target: "≥ 60" }
-              ].map((kr, i) => (
-                <div key={i} style={{ display: "flex", gap: 10, padding: "8px 12px", background: "#fff", borderRadius: 6 }}>
-                  <Icon.Hash size={13} style={{ color: "var(--fg4)", marginTop: 2 }} />
-                  <div style={{ flex: 1, fontSize: 13, color: "var(--fg1)" }}>{kr.kr}</div>
-                  <span className="pill pill--info num">{kr.target}</span>
+          <button
+            className="btn btn--primary btn--sm"
+            onClick={generate}
+            disabled={running}
+          >
+            <Icon.Sparkles size={13} /> {running ? "生成中…" : (draft ? "重新生成" : "生成结构化输出")}
+          </button>
+        </div>
+        {error && (
+          <div style={{ marginBottom: 16, padding: "10px 14px", background: "var(--danger-bg)", border: "1px solid var(--danger-border)", borderRadius: 8, color: "var(--danger-text)", fontSize: 12 }}>
+            {error === "anthropic_not_configured"
+              ? "未配置 ANTHROPIC_API_KEY:无法生成结构化输出。"
+              : error === "structured_output_parse_failed"
+                ? "模型返回的内容无法解析,请重试。"
+                : `请求失败:${error}`}
+          </div>
+        )}
+        {!draft && (
+          <div style={{ padding: "48px 24px", background: "var(--slate-50)", border: "1px dashed var(--border)", borderRadius: 12, textAlign: "center" }}>
+            <Icon.FileText size={28} style={{ color: "var(--fg4)", marginBottom: 10 }} />
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)", marginBottom: 6 }}>本问题尚未生成结构化输出</div>
+            <div style={{ fontSize: 12, color: "var(--fg3)", lineHeight: 1.6 }}>
+              生成后会得到一份草案:Objective + KRs + 关键项目 + 决策日志条目。可手动修改后写入 OKR 注册表与项目库。
+            </div>
+          </div>
+        )}
+        {draft && (
+          <>
+            <div className="card" style={{ padding: 24, marginBottom: 16 }}>
+              <div className="row" style={{ gap: 10, marginBottom: 16 }}>
+                <Icon.Target size={18} style={{ color: "var(--vel-indigo)" }} />
+                <div style={{ fontSize: 16, fontWeight: 800, color: "var(--fg1)" }}>建议生成 Objective (草案)</div>
+              </div>
+              <div style={{ background: "var(--vel-indigo-50)", border: "1px solid var(--vel-indigo-100)", borderRadius: 10, padding: 18, marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--vel-indigo-700)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>{draft.objective.code}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "var(--fg1)", marginBottom: 12 }}>{draft.objective.title}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {(draft.objective.krs || []).map((kr, i) => (
+                    <div key={i} style={{ display: "flex", gap: 10, padding: "8px 12px", background: "#fff", borderRadius: 6 }}>
+                      <Icon.Hash size={13} style={{ color: "var(--fg4)", marginTop: 2 }} />
+                      <div style={{ flex: 1, fontSize: 13, color: "var(--fg1)" }}>{kr.kr}</div>
+                      <span className="pill pill--info num">{kr.target}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn btn--primary btn--sm">发布到 OKR 注册表</button>
-            <button className="btn btn--ghost btn--sm">编辑后发布</button>
-          </div>
-        </div>
-
-        <div className="card" style={{ padding: 24, marginBottom: 16 }}>
-          <div className="row" style={{ gap: 10, marginBottom: 16 }}>
-            <Icon.Layers size={18} style={{ color: "#10b981" }} />
-            <div style={{ fontSize: 16, fontWeight: 800, color: "var(--fg1)" }}>建议生成关键项目 (草案)</div>
-          </div>
-          {[
-            { name: "DTC 旗舰内容工厂搭建", owner: "Anna 林 · 市场部", milestone: "5 月样板间直播首秀" },
-            { name: "县域服务网络 30 城前置铺设", owner: "王锐 · 服务部", milestone: "Q2 完成 SC 选型" },
-            { name: "全屋净水套系柔性产线改造", owner: "韩松 · 供应链", milestone: "Q3 试产验证" }
-          ].map((p, i) => (
-            <div key={i} style={{ display: "flex", gap: 12, padding: 12, borderBottom: i < 2 ? "1px solid var(--border-soft)" : "none" }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: "#10b98118", color: "#10b981", display: "grid", placeItems: "center" }}>
-                <Icon.Package size={16} />
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg1)" }}>{p.name}</div>
-                <div style={{ fontSize: 11, color: "var(--fg3)", marginTop: 2 }}>{p.owner} · 里程碑 <strong style={{ color: "var(--fg2)" }}>{p.milestone}</strong></div>
+              <div style={{ fontSize: 11, color: "var(--fg4)" }}>提示:点击「编辑后发布」可在 OKR 注册表中调整后再正式写入。</div>
+            </div>
+
+            {(draft.projects || []).length > 0 && (
+              <div className="card" style={{ padding: 24, marginBottom: 16 }}>
+                <div className="row" style={{ gap: 10, marginBottom: 16 }}>
+                  <Icon.Layers size={18} style={{ color: "#10b981" }} />
+                  <div style={{ fontSize: 16, fontWeight: 800, color: "var(--fg1)" }}>建议生成关键项目 (草案)</div>
+                </div>
+                {draft.projects.map((p, i) => (
+                  <div key={i} style={{ display: "flex", gap: 12, padding: 12, borderBottom: i < draft.projects.length - 1 ? "1px solid var(--border-soft)" : "none" }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: "#10b98118", color: "#10b981", display: "grid", placeItems: "center" }}>
+                      <Icon.Package size={16} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg1)" }}>{p.name}</div>
+                      <div style={{ fontSize: 11, color: "var(--fg3)", marginTop: 2 }}>
+                        {p.owner || "—"}{p.milestone && <> · 里程碑 <strong style={{ color: "var(--fg2)" }}>{p.milestone}</strong></>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="card" style={{ padding: 24 }}>
+              <div className="row" style={{ gap: 10, marginBottom: 14 }}>
+                <Icon.Quote size={18} style={{ color: "#7c3aed" }} />
+                <div style={{ fontSize: 16, fontWeight: 800, color: "var(--fg1)" }}>决策日志条目 (草案)</div>
+              </div>
+              <div style={{ fontSize: 13, color: "var(--fg2)", lineHeight: 1.7 }}>
+                <p><strong style={{ color: "var(--fg1)" }}>问题:</strong> {draft.decision.question}</p>
+                <p><strong style={{ color: "var(--fg1)" }}>结论:</strong> {draft.decision.conclusion}</p>
+                {(draft.decision.assumptions || []).length > 0 && (
+                  <p><strong style={{ color: "var(--fg1)" }}>关键假设:</strong> {draft.decision.assumptions.join(";")}。</p>
+                )}
+                {(draft.decision.dissent || []).length > 0 && (
+                  <p><strong style={{ color: "var(--fg1)" }}>反对意见:</strong> {draft.decision.dissent.join(";")}。</p>
+                )}
+                {draft.decision.evidence && (
+                  <p><strong style={{ color: "var(--fg1)" }}>证据来源:</strong> {draft.decision.evidence}</p>
+                )}
               </div>
             </div>
-          ))}
-        </div>
-
-        <div className="card" style={{ padding: 24 }}>
-          <div className="row" style={{ gap: 10, marginBottom: 14 }}>
-            <Icon.Quote size={18} style={{ color: "#7c3aed" }} />
-            <div style={{ fontSize: 16, fontWeight: 800, color: "var(--fg1)" }}>决策日志条目 (草案)</div>
-          </div>
-          <div style={{ fontSize: 13, color: "var(--fg2)", lineHeight: 1.7 }}>
-            <p><strong style={{ color: "var(--fg1)" }}>问题:</strong> FY26 是否加大线上 DTC 渠道投入?</p>
-            <p><strong style={{ color: "var(--fg1)" }}>结论:</strong> 选择"稳健并行"方案 — DTC 占比 22%,保留线下,2 城试点县域服务网络。</p>
-            <p><strong style={{ color: "var(--fg1)" }}>关键假设:</strong> 县域履约能力可在 Q2 完成铺设;BP/SC/SA 同价机制 Q3 闭环。</p>
-            <p><strong style={{ color: "var(--fg1)" }}>反对意见:</strong> 风险视角(渠道冲突)、运营视角(履约能力)— 已纳入前置条件。</p>
-            <p><strong style={{ color: "var(--fg1)" }}>证据来源:</strong> 7 条公司知识、3 条市场数据、4 条历史决策。</p>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

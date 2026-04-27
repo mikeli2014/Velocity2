@@ -566,3 +566,335 @@ def debate_synthesis_stream(question_id: str, db: Session = Depends(get_db)):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# --- Strategy options ---------------------------------------------------
+#
+# Output deliverables that consume the debate transcript and produce
+# decision-ready artifacts:
+#
+#   1. ``/options/generate`` — 2-3 candidate options (saved to DB so the
+#      page can re-render without paying tokens).
+#   2. ``/structured-output/generate`` — single draft Objective + KRs +
+#      projects + decision-log entry. Ephemeral (not persisted) — user
+#      "promotes" via existing CRUD endpoints when they're ready.
+
+OPTIONS_MAX_TOKENS = 1500
+STRUCTURED_OUTPUT_MAX_TOKENS = 1800
+
+
+def _option_to_out(row: models.StrategyOption) -> schemas.StrategyOptionOut:
+    return schemas.StrategyOptionOut.model_validate(
+        {
+            "id": row.id,
+            "question_id": row.question_id,
+            "idx": row.idx,
+            "name": row.name,
+            "description": row.description,
+            "roi": row.roi,
+            "risk": row.risk,
+            "time_estimate": row.time_estimate,
+            "pros": row.pros,
+            "cons": row.cons,
+            "recommended": row.recommended,
+            "model": row.model,
+        }
+    )
+
+
+def _build_debate_summary_block(db: Session, question: models.StrategyQuestion) -> str:
+    """Pull the persisted debate transcript and stance counts into a
+    single text block for the options + structured-output prompts.
+    Both endpoints share this so the cached prefix matches and the
+    second call gets a cache hit on the first one's bytes."""
+    rows = (
+        db.query(models.DebateMessage)
+        .filter(models.DebateMessage.question_id == question.id)
+        .order_by(models.DebateMessage.round, models.DebateMessage.id)
+        .all()
+    )
+    lines = [f"研讨问题:{question.title}"]
+    if question.summary:
+        lines.append(f"问题概要:{question.summary}")
+    if question.okrs:
+        lines.append(f"关联 OKR:{'、'.join(question.okrs)}。")
+    if not rows:
+        lines.append("(本问题尚无辩论记录,请基于问题概要做出判断。)")
+        return "\n\n".join(lines)
+    pro = sum(1 for r in rows if r.stance == "pro")
+    con = sum(1 for r in rows if r.stance == "con")
+    concern = sum(1 for r in rows if r.stance == "concern")
+    lines.append(f"立场分布:赞成 {pro}、反对 {con}、保留 {concern}。")
+    transcript_lines: list[str] = []
+    for r in rows:
+        ag = db.get(models.Agent, r.agent_id)
+        ag_label = ag.name if ag else r.agent_id
+        transcript_lines.append(f"第 {r.round} 轮 · {ag_label}({r.stance}):{r.text}")
+    lines.append("研讨记录:\n" + "\n".join(transcript_lines))
+    return "\n\n".join(lines)
+
+
+_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.+?)\s*```", re.DOTALL)
+
+
+def _parse_json_payload(text: str) -> Any:
+    """Pull a JSON object out of an LLM response. Tolerates fenced code
+    blocks (```json … ```) and plain top-level JSON. Returns None on
+    failure — callers raise the right HTTPException."""
+    if not text:
+        return None
+    m = _JSON_FENCE_RE.search(text)
+    candidate = m.group(1) if m else text
+    try:
+        return json.loads(candidate)
+    except (json.JSONDecodeError, ValueError):
+        # One more attempt: trim to the first {...} block.
+        start = candidate.find("{")
+        end = candidate.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                return json.loads(candidate[start : end + 1])
+            except (json.JSONDecodeError, ValueError):
+                return None
+    return None
+
+
+@router.get("/{question_id}/options", response_model=list[schemas.StrategyOptionOut])
+def list_options(question_id: str, db: Session = Depends(get_db)):
+    if db.get(models.StrategyQuestion, question_id) is None:
+        raise HTTPException(status_code=404, detail="question_not_found")
+    rows = (
+        db.query(models.StrategyOption)
+        .filter(models.StrategyOption.question_id == question_id)
+        .order_by(models.StrategyOption.idx, models.StrategyOption.id)
+        .all()
+    )
+    return [_option_to_out(r) for r in rows]
+
+
+@router.post(
+    "/{question_id}/options/generate",
+    response_model=list[schemas.StrategyOptionOut],
+    status_code=status.HTTP_201_CREATED,
+)
+def generate_options(question_id: str, db: Session = Depends(get_db)):
+    """Synthesize 2-3 candidate options from the debate transcript.
+    Replaces any existing options for the question (regenerate-friendly)."""
+    question = db.get(models.StrategyQuestion, question_id)
+    if question is None:
+        raise HTTPException(status_code=404, detail="question_not_found")
+
+    client = chat_module._get_anthropic_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="anthropic_not_configured")
+
+    company = db.query(models.Company).first()
+    debate_block = _build_debate_summary_block(db, question)
+
+    system_blocks = [
+        {"type": "text", "text": chat_module._company_block(company), "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": debate_block, "cache_control": {"type": "ephemeral"}},
+        {
+            "type": "text",
+            "text": (
+                "你是 Velocity OS 的战略选项合成助手。基于上方公司背景与研讨记录,"
+                "生成 2-3 个候选战略选项,体现激进 / 稳健 / 渐进 等不同节奏。\n\n"
+                "**输出要求**:严格输出 JSON,不要包含其他解释文字。形如:\n"
+                '{"options": ['
+                '{"name":"选项 A · ...","description":"...","roi":"高|中|低",'
+                '"risk":"高|中|低","time":"...","pros":3,"cons":2,"recommended":false}'
+                "]}\n"
+                "其中 pros/cons 是研讨中赞成 / 反对的论据数量(整数);"
+                "recommended 仅一个为 true(被各方共识最大化的方案);"
+                "name 用「选项 A · 简称」格式;description 控制在 1-2 句话。"
+            ),
+        },
+    ]
+
+    try:
+        message = client.messages.create(
+            model=DEFAULT_CHAT_MODEL,
+            max_tokens=OPTIONS_MAX_TOKENS,
+            system=system_blocks,
+            messages=[{"role": "user", "content": "请基于以上研讨生成候选战略选项。"}],
+        )
+    except anthropic.RateLimitError as exc:
+        raise HTTPException(status_code=429, detail="anthropic_rate_limited") from exc
+    except anthropic.BadRequestError as exc:
+        raise HTTPException(status_code=400, detail="anthropic_bad_request") from exc
+    except anthropic.APIError as exc:
+        logger.exception("options upstream error")
+        raise HTTPException(status_code=502, detail="anthropic_upstream_error") from exc
+
+    raw = chat_module._extract_text(message)
+    payload = _parse_json_payload(raw)
+    if not payload or not isinstance(payload, dict) or not isinstance(payload.get("options"), list):
+        raise HTTPException(status_code=502, detail="options_parse_failed")
+
+    used_model = getattr(message, "model", DEFAULT_CHAT_MODEL)
+
+    # Replace existing options for this question.
+    db.query(models.StrategyOption).filter(
+        models.StrategyOption.question_id == question_id
+    ).delete()
+    db.flush()
+
+    new_rows: list[models.StrategyOption] = []
+    for idx, opt in enumerate(payload["options"][:5]):  # cap to 5 just in case
+        if not isinstance(opt, dict) or not opt.get("name"):
+            continue
+        row = models.StrategyOption(
+            id=schemas.make_id("opt"),
+            question_id=question_id,
+            idx=idx,
+            name=str(opt.get("name", "")).strip(),
+            description=opt.get("description"),
+            roi=opt.get("roi"),
+            risk=opt.get("risk"),
+            time_estimate=opt.get("time"),
+            pros=int(opt.get("pros") or 0),
+            cons=int(opt.get("cons") or 0),
+            recommended=bool(opt.get("recommended")),
+            model=used_model,
+        )
+        db.add(row)
+        new_rows.append(row)
+
+    if not new_rows:
+        raise HTTPException(status_code=502, detail="options_parse_failed")
+
+    # Bump question.options_count for the registry display.
+    question.options_count = len(new_rows)
+    db.commit()
+    for r in new_rows:
+        db.refresh(r)
+    return [_option_to_out(r) for r in new_rows]
+
+
+@router.post(
+    "/{question_id}/structured-output/generate",
+    response_model=schemas.StructuredOutputDraft,
+)
+def generate_structured_output(
+    question_id: str,
+    body: dict[str, Any] | None = None,
+    db: Session = Depends(get_db),
+):
+    """Produce a single decision-ready draft (Objective + KRs +
+    Projects + Decision-log entry). Ephemeral — frontend "applies" it
+    via the existing CRUD endpoints when the user accepts.
+
+    Body may include ``optionId`` to anchor the output on a specific
+    candidate option; otherwise we use the recommended one."""
+    question = db.get(models.StrategyQuestion, question_id)
+    if question is None:
+        raise HTTPException(status_code=404, detail="question_not_found")
+
+    client = chat_module._get_anthropic_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="anthropic_not_configured")
+
+    chosen_option_id = (body or {}).get("optionId")
+    options = (
+        db.query(models.StrategyOption)
+        .filter(models.StrategyOption.question_id == question_id)
+        .order_by(models.StrategyOption.idx, models.StrategyOption.id)
+        .all()
+    )
+    chosen: models.StrategyOption | None = None
+    if chosen_option_id:
+        chosen = next((o for o in options if o.id == chosen_option_id), None)
+    if chosen is None:
+        chosen = next((o for o in options if o.recommended), None)
+    if chosen is None and options:
+        chosen = options[0]
+
+    company = db.query(models.Company).first()
+    debate_block = _build_debate_summary_block(db, question)
+    if chosen is not None:
+        chosen_block = (
+            f"采纳的战略选项:{chosen.name}\n"
+            f"描述:{chosen.description or '—'}\n"
+            f"ROI:{chosen.roi or '—'} · 风险:{chosen.risk or '—'} · 节奏:{chosen.time_estimate or '—'}"
+        )
+    else:
+        chosen_block = "(尚未选定具体选项,请基于研讨综合判断给出最稳健的方案。)"
+
+    system_blocks = [
+        {"type": "text", "text": chat_module._company_block(company), "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": debate_block, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": chosen_block, "cache_control": {"type": "ephemeral"}},
+        {
+            "type": "text",
+            "text": (
+                "你是 Velocity OS 的结构化输出助手。基于公司背景、研讨记录与采纳的选项,"
+                "生成一份决策落地草案,包含:\n"
+                "  1. 一个 Objective 草案(带 code 如 O5、title、2-3 个 KR,每个 KR 含 kr 名称 + 量化 target)\n"
+                "  2. 2-3 个关键项目(name + owner + 关键里程碑)\n"
+                "  3. 一条决策日志(question + conclusion + 关键假设列表 + 反对意见列表 + evidence 简述)\n\n"
+                "**输出要求**:严格输出 JSON,不要包含其他解释文字。形如:\n"
+                '{"objective":{"code":"O5","title":"...","krs":[{"kr":"KR1 · ...","target":"≥ 22%"}]},'
+                '"projects":[{"name":"...","owner":"...","milestone":"..."}],'
+                '"decision":{"question":"...","conclusion":"...",'
+                '"assumptions":["..."],"dissent":["..."],"evidence":"..."}}\n'
+                "用简体中文,术语贴合公司既有用法(BP/SC/SA、CMF、奥维等)。"
+            ),
+        },
+    ]
+
+    try:
+        message = client.messages.create(
+            model=DEFAULT_CHAT_MODEL,
+            max_tokens=STRUCTURED_OUTPUT_MAX_TOKENS,
+            system=system_blocks,
+            messages=[{"role": "user", "content": "请生成结构化输出草案。"}],
+        )
+    except anthropic.RateLimitError as exc:
+        raise HTTPException(status_code=429, detail="anthropic_rate_limited") from exc
+    except anthropic.BadRequestError as exc:
+        raise HTTPException(status_code=400, detail="anthropic_bad_request") from exc
+    except anthropic.APIError as exc:
+        logger.exception("structured-output upstream error")
+        raise HTTPException(status_code=502, detail="anthropic_upstream_error") from exc
+
+    raw = chat_module._extract_text(message)
+    payload = _parse_json_payload(raw)
+    if not isinstance(payload, dict) or "objective" not in payload or "decision" not in payload:
+        raise HTTPException(status_code=502, detail="structured_output_parse_failed")
+
+    obj = payload["objective"] or {}
+    krs_raw = obj.get("krs") or []
+    krs: list[dict[str, str]] = []
+    for k in krs_raw:
+        if isinstance(k, dict):
+            krs.append({"kr": str(k.get("kr") or ""), "target": str(k.get("target") or "")})
+
+    projects: list[schemas.StructuredOutputProjectDraft] = []
+    for p in payload.get("projects") or []:
+        if isinstance(p, dict) and p.get("name"):
+            projects.append(schemas.StructuredOutputProjectDraft(
+                name=str(p.get("name", "")),
+                owner=p.get("owner"),
+                milestone=p.get("milestone"),
+            ))
+
+    dec = payload.get("decision") or {}
+    decision = schemas.StructuredOutputDecisionDraft(
+        question=str(dec.get("question") or question.title),
+        conclusion=str(dec.get("conclusion") or ""),
+        assumptions=[str(a) for a in (dec.get("assumptions") or []) if a],
+        dissent=[str(d) for d in (dec.get("dissent") or []) if d],
+        evidence=dec.get("evidence"),
+    )
+
+    return schemas.StructuredOutputDraft(
+        objective=schemas.StructuredOutputObjectiveDraft(
+            code=str(obj.get("code") or "O?"),
+            title=str(obj.get("title") or ""),
+            krs=krs,
+        ),
+        projects=projects,
+        decision=decision,
+        recommended_option_id=chosen.id if chosen else None,
+        model=getattr(message, "model", DEFAULT_CHAT_MODEL),
+    )

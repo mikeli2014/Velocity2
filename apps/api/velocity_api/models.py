@@ -287,6 +287,31 @@ class DebateMessage(Base):
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)
 
 
+class StrategyOption(Base):
+    """A candidate strategy option synthesized from a debate transcript.
+
+    Persisted (vs ephemeral) so the user can come back to the page and
+    see the same options without paying tokens again. Regenerating
+    replaces the existing rows for the question.
+    """
+
+    __tablename__ = "strategy_options"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    question_id: Mapped[str] = mapped_column(ForeignKey("strategy_questions.id", ondelete="CASCADE"))
+    idx: Mapped[int] = mapped_column(default=0)  # display order
+    name: Mapped[str] = mapped_column(String)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    roi: Mapped[str | None] = mapped_column(String, nullable=True)       # 高 / 中 / 低
+    risk: Mapped[str | None] = mapped_column(String, nullable=True)      # 高 / 中 / 低
+    time_estimate: Mapped[str | None] = mapped_column(String, nullable=True)
+    pros: Mapped[int] = mapped_column(default=0)
+    cons: Mapped[int] = mapped_column(default=0)
+    recommended: Mapped[bool] = mapped_column(default=False)
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
+
+
 # --- Skills / Workflows / Runs ----------------------------------------
 
 

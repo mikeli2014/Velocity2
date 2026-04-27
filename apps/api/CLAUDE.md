@@ -226,7 +226,7 @@ on embedding provider + vector store (see DESIGN.md if/when it lands).
 | | Phase 1+2 ✅ shipped | Phase 3 (parked / future) |
 |---|---|---|
 | **CRUD** | Objectives + KRs, RoutingRules, Projects, Decisions, KnowledgeSources, IngestQueue (incl. → KnowledgeSource promotion) all full CRUD with audit emissions; KnowledgeDomain PATCH | — |
-| **AI** | `/api/v1/chat` + `/chat/stream` (Sonnet 4.6, prompt caching, SSE), `/api/v1/strategy-questions/{id}/debate` + `/round` + `/round/stream` + `/synthesis` + `/synthesis/stream` (per-agent SSE with cached company/question prefix), `/api/v1/route` (Haiku 4.5 classifier). Soft-fall to 503 when key missing. | Agent self-reflection / disagreement loops; tool use |
+| **AI** | `/api/v1/chat` + `/chat/stream` (Sonnet 4.6, prompt caching, SSE), `/api/v1/strategy-questions/{id}/debate` + `/round` + `/round/stream` + `/synthesis` + `/synthesis/stream` (per-agent SSE with cached company/question prefix), `/options` + `/options/generate` (persisted candidate options), `/structured-output/generate` (ephemeral OKR + projects + decision draft), `/api/v1/route` (Haiku 4.5 classifier). Soft-fall to 503 when key missing. | Agent self-reflection / disagreement loops; tool use |
 | **RAG** | None — explicitly parked. | pgvector + document parser + Voyage embeddings |
 | **Auth** | `X-User-Id` header → `current_user` dep → audit `actor`. ASCII identifiers; demo default `陈志远` server-side. | Real OAuth / JWT via the same dep |
 | **Frontend wiring** | Every page reads from `useApi(...)` with seed fallback; OkrPage / KnowledgePage / Assistants&Governance / DepartmentPage / WorkflowsPage / Strategy WarCouncil all do API CRUD / streaming. | — |
