@@ -1,12 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Icon, KpiCard, Progress, HealthPill, ConfirmModal, Modal, makeId } from "../components/primitives.jsx";
 import { ProjectEditor } from "./OkrPage.jsx";
 import { ProjectDetail } from "../components/ProjectDetail.jsx";
 import { RunDialog } from "../components/RunDialog.jsx";
 import { Departments as SeedDepartments, KnowledgeDomains, SkillPacks, KnowledgeSources, Company, Projects, Objectives, Workflows, DeptActivity } from "../data/seed.js";
-import { useApi, apiStream, ApiError } from "../lib/api.js";
+import { useApi, apiPost, apiStream, ApiError } from "../lib/api.js";
 
-export function DepartmentPage({ deptId }) {
+export function DepartmentPage({ deptId, setRoute }) {
   // Department record is derived from `deptId`; user edits in the
   // configuration modal layer on top via per-deptId override map. This
   // way switching departments doesn't need an effect to reset state.
@@ -65,7 +65,14 @@ export function DepartmentPage({ deptId }) {
           </div>
           <div className="row" style={{ gap: 8 }}>
             <button className="btn btn--ghost btn--sm" onClick={() => setConfiguring(true)}><Icon.Settings size={13} /> 配置</button>
-            <button className="btn btn--primary btn--sm" style={{ background: dept.color }}><Icon.MessageCircle size={13} /> 打开{dept.assistant}</button>
+            <button
+              className="btn btn--primary btn--sm"
+              style={{ background: dept.color }}
+              onClick={() => setTab("assistant")}
+              disabled={!dept.assistant || dept.assistant === "—"}
+            >
+              <Icon.MessageCircle size={13} /> 打开{dept.assistant}
+            </button>
           </div>
         </div>
         <div className="tabs" style={{ marginBottom: 0, borderBottom: "none" }}>
@@ -78,7 +85,7 @@ export function DepartmentPage({ deptId }) {
       </div>
 
       {tab === "overview" && <DeptOverview dept={dept} />}
-      {tab === "knowledge" && <DeptKnowledge dept={dept} />}
+      {tab === "knowledge" && <DeptKnowledge dept={dept} setRoute={setRoute} />}
       {tab === "cmf" && <CMFIntelligence />}
       {tab === "market" && <MarketInsights />}
       {tab === "skills" && <DeptSkills dept={dept} />}
@@ -326,27 +333,241 @@ function DeptOverview({ dept }) {
   );
 }
 
-function DeptKnowledge({ dept }) {
+function DeptKnowledge({ dept, setRoute }) {
+  // Real data: knowledge domains + sources from the API, with seed
+  // fallback during the loading window.
+  const { data: apiDomains } = useApi("/api/v1/knowledge-domains");
+  const allDomains = apiDomains ?? KnowledgeDomains;
+  // If the dept has explicitly chosen a subset (via 配置 modal), respect
+  // it; otherwise show all company-level domains.
+  const domains = (dept.knowledgeDomainIds && dept.knowledgeDomainIds.length > 0)
+    ? allDomains.filter(d => dept.knowledgeDomainIds.includes(d.id))
+    : allDomains;
+
+  const { data: apiSources, refresh: refreshSources } = useApi("/api/v1/knowledge-sources");
+  const allSources = apiSources ?? KnowledgeSources;
+  // Filter sources to "this department's universe": scope contains the
+  // dept name, OR scope === "公司" (visible to everyone). Sort recent
+  // first if there's an `updated` field.
+  const deptName = dept.name || "";
+  const deptSources = allSources
+    .filter(s => (s.scope || "").includes(deptName) || s.scope === "公司")
+    .slice(0, 6);
+
+  const [uploadOpen, setUploadOpen] = useState(false);
+
+  function openDomain(domainId) {
+    if (!setRoute) return;
+    // Jump to the company knowledge center with a deep-link hash so a
+    // future deep-link handler in KnowledgePage can scroll to / open
+    // this domain. Use history API (lint-friendly).
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", `#domain:${domainId}`);
+    }
+    setRoute({ page: "knowledge" });
+  }
+
+  function openSourceById(sourceId) {
+    if (!setRoute) return;
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", `#knowledge:${sourceId}`);
+    }
+    setRoute({ page: "knowledge" });
+  }
+
   return (
     <div>
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 16 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)" }}>知识域</div>
-        <button className="btn btn--primary btn--sm"><Icon.Upload size={13} /> 上传到部门</button>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)" }}>
+          知识域 <span style={{ color: "var(--fg3)", fontWeight: 400 }}>· {domains.length} 个 · {dept.knowledge?.toLocaleString() || 0} 条</span>
+        </div>
+        <button className="btn btn--primary btn--sm" onClick={() => setUploadOpen(true)}>
+          <Icon.Upload size={13} /> 上传到部门
+        </button>
       </div>
       <div className="grid grid-cols-4" style={{ marginBottom: 24 }}>
-        {KnowledgeDomains.map(d => (
-          <div key={d.id} className="card" style={{ padding: 16 }}>
+        {domains.map(d => (
+          <div
+            key={d.id}
+            className="card"
+            style={{ padding: 16, cursor: "pointer", transition: "transform 0.12s" }}
+            onClick={() => openDomain(d.id)}
+            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ""; }}
+            title="点击查看公司知识中心中该域的全部知识源"
+          >
             <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
               <Icon.Folder size={15} style={{ color: dept.color }} />
               <span className={`pill ${d.health === 'ok' ? 'pill--ok' : 'pill--warn'}`}>{d.coverage}%</span>
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--fg1)", marginBottom: 4 }}>{d.name}</div>
             <div className="num" style={{ fontSize: 18, fontWeight: 800, color: "var(--fg1)" }}>{d.count}</div>
-            <div style={{ fontSize: 11, color: "var(--fg3)" }}>条目 · 更新 {d.lastUpdate}</div>
+            <div style={{ fontSize: 11, color: "var(--fg3)" }}>条目 · 更新 {d.lastUpdate || "—"}</div>
+          </div>
+        ))}
+        {domains.length === 0 && (
+          <div className="card" style={{ gridColumn: "1 / -1", padding: 32, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>
+            该部门尚未绑定任何知识域 — 点击右上角「配置」选择
+          </div>
+        )}
+      </div>
+
+      {/* Recent sources visible to this dept (scope=部门 or 公司). Real
+          data from /api/v1/knowledge-sources. */}
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div className="card__head">
+          <div className="card__title"><Icon.FileText size={14} /> 本部门可见的最近知识源</div>
+          <span style={{ fontSize: 11, color: "var(--fg3)" }}>共 {deptSources.length} 条 · 来自 /api/v1/knowledge-sources</span>
+        </div>
+        {deptSources.length === 0 && (
+          <div style={{ padding: 24, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>暂无可见知识源</div>
+        )}
+        {deptSources.map((s, i) => (
+          <div
+            key={s.id}
+            style={{
+              display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 12, alignItems: "center",
+              padding: "10px 18px", borderTop: i ? "1px solid var(--border-soft)" : "none",
+              cursor: setRoute ? "pointer" : "default"
+            }}
+            onClick={setRoute ? () => openSourceById(s.id) : undefined}
+          >
+            <span className="pill pill--neutral">{s.type || "—"}</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg1)" }}>{s.title}</div>
+              <div style={{ fontSize: 11, color: "var(--fg3)", marginTop: 2 }}>{s.scope || "—"} · {s.size || "—"} · 更新 {s.updated || "—"}</div>
+            </div>
+            <span className={`pill ${s.quality === 'verified' ? 'pill--ok' : s.quality === 'flagged' ? 'pill--danger' : 'pill--warn'}`}>{s.quality || "draft"}</span>
+            <Icon.ArrowRight size={12} style={{ color: "var(--fg4)" }} />
           </div>
         ))}
       </div>
+
+      {uploadOpen && (
+        <DeptUploadModal
+          dept={dept}
+          onClose={() => setUploadOpen(false)}
+          onUploaded={() => { setUploadOpen(false); refreshSources(); }}
+        />
+      )}
     </div>
+  );
+}
+
+// Department-scoped upload modal. POSTs to /api/v1/ingest-queue with
+// scope pre-set to this department; falls back to local-only if API
+// is unreachable.
+function DeptUploadModal({ dept, onClose, onUploaded }) {
+  const [title, setTitle] = useState("");
+  const [file, setFile] = useState(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState(null);
+  const fileInputRef = useRef(null);
+
+  function pickFile() { fileInputRef.current?.click(); }
+  function adoptFile(f) { if (!f) return; setFile(f); if (!title) setTitle(f.name); }
+
+  function fmtSize(bytes) {
+    if (!bytes) return "—";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+  function detectType() {
+    const lower = (file?.name || title).toLowerCase();
+    if (lower.endsWith(".pdf")) return "PDF";
+    if (lower.endsWith(".docx") || lower.endsWith(".doc")) return "DOC";
+    if (lower.endsWith(".pptx") || lower.endsWith(".ppt")) return "PPT";
+    if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) return "XLSX";
+    if (lower.endsWith(".txt") || lower.endsWith(".md")) return "TXT";
+    return "FILE";
+  }
+
+  async function start() {
+    if (running) return;
+    setRunning(true);
+    setError(null);
+    try {
+      await apiPost("/api/v1/ingest-queue", {
+        name: file?.name || title.trim() || "(未命名)",
+        type: detectType(),
+        size: file ? fmtSize(file.size) : "—",
+        state: "review",
+        progress: 100,
+        scope: dept.name,
+        owner: dept.lead || "当前用户"
+      });
+      onUploaded?.();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : String(err));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={`上传到 ${dept.name} 部门`}
+      sub={`材料会进入入库队列(scope=${dept.name}),审核通过后绑定到本部门可见的知识源列表。`}
+      onClose={onClose}
+      foot={<>
+        <button className="btn btn--ghost btn--sm" onClick={onClose}>取消</button>
+        <button
+          className="btn btn--primary btn--sm"
+          onClick={start}
+          disabled={running || (!file && !title.trim())}
+          style={(running || (!file && !title.trim())) ? { opacity: 0.5, cursor: "not-allowed" } : { background: dept.color }}
+        >
+          <Icon.Upload size={13} /> {running ? "上传中…" : "提交入库"}
+        </button>
+      </>}
+    >
+      <div className="field">
+        <label className="field__label">文件</label>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={pickFile}
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); adoptFile(e.dataTransfer?.files?.[0]); }}
+          style={{ border: "2px dashed var(--border)", borderRadius: 10, padding: 24, textAlign: "center", color: "var(--fg3)", cursor: "pointer" }}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.txt,.md"
+            style={{ display: "none" }}
+            onChange={e => adoptFile(e.target.files?.[0])}
+          />
+          {file ? (
+            <>
+              <Icon.FileText size={24} style={{ margin: "0 auto 6px", color: dept.color }} />
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--fg1)" }}>{file.name}</div>
+              <div style={{ fontSize: 11, color: "var(--fg3)", marginTop: 2 }}>{fmtSize(file.size)} · {detectType()}</div>
+            </>
+          ) : (
+            <>
+              <Icon.Upload size={24} style={{ margin: "0 auto 6px", color: "var(--fg4)" }} />
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg2)" }}>拖入或点击选择文件</div>
+              <input
+                type="text"
+                placeholder="或输入文件名"
+                className="input"
+                style={{ marginTop: 10, maxWidth: 280 }}
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                onClick={e => e.stopPropagation()}
+              />
+            </>
+          )}
+        </div>
+      </div>
+      {error && (
+        <div style={{ padding: "10px 14px", background: "var(--danger-bg)", border: "1px solid var(--danger-border)", borderRadius: 8, color: "var(--danger-text)", fontSize: 12 }}>
+          上传失败:{error}
+        </div>
+      )}
+    </Modal>
   );
 }
 
