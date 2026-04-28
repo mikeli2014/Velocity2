@@ -86,9 +86,9 @@ export function DepartmentPage({ deptId, setRoute }) {
 
       {tab === "overview" && <DeptOverview dept={dept} />}
       {tab === "knowledge" && <DeptKnowledge dept={dept} setRoute={setRoute} />}
-      {tab === "cmf" && <CMFIntelligence />}
-      {tab === "market" && <MarketInsights />}
-      {tab === "skills" && <DeptSkills dept={dept} />}
+      {tab === "cmf" && <CMFIntelligence dept={dept} />}
+      {tab === "market" && <MarketInsights dept={dept} />}
+      {tab === "skills" && <DeptSkills dept={dept} setRoute={setRoute} />}
       {tab === "workflows" && <DeptWorkflows dept={dept} />}
       {tab === "projects" && <DeptProjects dept={dept} />}
       {tab === "assistant" && <AssistantChat dept={dept} />}
@@ -285,13 +285,44 @@ function ConfigList({ icon, label, items, selected, onToggle, renderRow }) {
 
 function DeptOverview({ dept }) {
   const feed = DeptActivity[dept.id] || DeptActivity[dept.parentId] || { questions: [], inbox: [] };
+  // Compute real numbers where the seed has them. Sparklines stay
+  // synthetic — we don't have time-series telemetry for skill / project
+  // health yet (P2-3 in 08_待办路线图.md).
+  const deptSkills = SkillPacks.filter(s => s.dept === dept.id);
+  const deptProjects = Projects.filter(p => p.deptId === dept.id);
+  const totalSkillUses = deptSkills.reduce((acc, s) => acc + (s.uses || 0), 0);
+  const projectHealthOk = deptProjects.filter(p => p.health === "ok").length;
+  const projectHealthPct = deptProjects.length > 0
+    ? Math.round((projectHealthOk / deptProjects.length) * 100)
+    : 0;
   return (
     <div>
       <div className="grid grid-cols-4" style={{ marginBottom: 20 }}>
-        <KpiCard label="知识条目" value={dept.knowledge.toLocaleString()} delta="+38" status="up" spark={[900, 940, 970, 1000, 1020, 1030, 1040, 1046]} color={dept.color} />
-        <KpiCard label="本周助手对话" value="412" delta="+62" status="up" spark={[280, 310, 340, 360, 380, 395, 405, 412]} color="#10b981" />
-        <KpiCard label="已运行技能" value="156" delta="+12" status="up" spark={[120, 128, 135, 140, 144, 150, 153, 156]} color="#7c3aed" />
-        <KpiCard label="项目健康度" value="87%" delta="+3pt" status="up" spark={[78, 80, 82, 84, 85, 86, 86, 87]} color="#f59e0b" />
+        <KpiCard
+          label="部门知识条目"
+          value={(dept.knowledge || 0).toLocaleString()}
+          spark={[Math.max(0, dept.knowledge - 140), dept.knowledge - 100, dept.knowledge - 70, dept.knowledge - 40, dept.knowledge - 20, dept.knowledge - 10, dept.knowledge - 5, dept.knowledge]}
+          color={dept.color}
+        />
+        <KpiCard
+          label="本周助手对话"
+          value="—"
+          delta="待按部门聚合"
+          color="#10b981"
+        />
+        <KpiCard
+          label={`累计技能调用 · ${deptSkills.length} 个 Skill`}
+          value={totalSkillUses.toLocaleString()}
+          status="up"
+          color="#7c3aed"
+        />
+        <KpiCard
+          label={`项目健康率 · ${deptProjects.length} 个项目`}
+          value={`${projectHealthPct}%`}
+          delta={`${projectHealthOk} ok`}
+          status={projectHealthPct >= 80 ? "up" : "down"}
+          color="#f59e0b"
+        />
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: "minmax(0,2fr) minmax(0,1fr)", gap: 20 }}>
@@ -571,13 +602,18 @@ function DeptUploadModal({ dept, onClose, onUploaded }) {
   );
 }
 
-function CMFIntelligence() {
+function CMFIntelligence({ dept }) {
   const swatches = [
     { name: "雾雪白", hex: "#F5F4EE", uses: 42 }, { name: "墨砂黑", hex: "#1F1E1C", uses: 38 },
     { name: "沙金", hex: "#C9A66B", uses: 24 }, { name: "玄铁灰", hex: "#5A5C5F", uses: 31 },
     { name: "薄雾蓝", hex: "#A6BFCB", uses: 18 }, { name: "暖香槟", hex: "#D4B895", uses: 15 },
     { name: "深湖绿", hex: "#1F3D38", uses: 12 }, { name: "瓷釉白", hex: "#EAE8E1", uses: 28 }
   ];
+  // 「拖入产品图片」 box clicked → open the CMF 图片识别 skill's
+  // RunDialog. Since the SkillPack has the image-input + CMF-output
+  // contract, we route through the same skill chat we wired earlier.
+  const cmfSkill = SkillPacks.find(s => s.id === "sp-cmf-vision");
+  const [running, setRunning] = useState(null);
   return (
     <div>
       <div className="grid" style={{ gridTemplateColumns: "minmax(0, 1fr) 320px", gap: 20 }}>
@@ -597,9 +633,22 @@ function CMFIntelligence() {
         </div>
         <div className="card" style={{ padding: 18 }}>
           <div className="card__title" style={{ marginBottom: 14 }}><Icon.Camera size={14} /> 上传图片识别</div>
-          <div style={{ border: "2px dashed var(--border)", borderRadius: 10, padding: 28, textAlign: "center", color: "var(--fg3)" }}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => cmfSkill && setRunning(cmfSkill)}
+            onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && cmfSkill) setRunning(cmfSkill); }}
+            style={{
+              border: "2px dashed var(--border)",
+              borderRadius: 10, padding: 28, textAlign: "center", color: "var(--fg3)",
+              cursor: cmfSkill ? "pointer" : "default", transition: "background 0.15s, border-color 0.15s"
+            }}
+            onMouseEnter={e => { if (cmfSkill) { e.currentTarget.style.borderColor = "var(--vel-indigo)"; e.currentTarget.style.background = "var(--vel-indigo-50)"; } }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = ""; e.currentTarget.style.background = ""; }}
+            title={cmfSkill ? "点击启动 CMF 图片识别 (Sonnet 4.6)" : "未找到对应 Skill"}
+          >
             <Icon.Upload size={28} style={{ margin: "0 auto 8px", color: "var(--fg4)" }} />
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg2)" }}>拖入产品图片</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg2)" }}>点击启动「CMF 图片识别」</div>
             <div style={{ fontSize: 11, color: "var(--fg4)", marginTop: 4 }}>识别色彩 / 材质 / 表面工艺 / CMF 标签</div>
           </div>
           <div style={{ marginTop: 14, fontSize: 12, color: "var(--fg3)" }}>
@@ -635,15 +684,27 @@ function CMFIntelligence() {
           <div style={{ fontSize: 11, color: "var(--fg3)", marginTop: 10 }}>数字代表近 90 天本部门方案中该组合的使用次数。</div>
         </div>
       </div>
+      {running && <RunDialog kind="skill" item={running} deptId={dept?.id} onClose={() => setRunning(null)} />}
     </div>
   );
 }
 
-function MarketInsights() {
+function MarketInsights({ dept }) {
+  // 「奥维数据分析」 skill backs the live "运行奥维数据分析" CTA.
+  const aoweiSkill = SkillPacks.find(s => s.id === "sp-aow");
+  const [running, setRunning] = useState(null);
   return (
+    <>
     <div className="grid" style={{ gridTemplateColumns: "minmax(0,2fr) minmax(0,1fr)", gap: 20 }}>
       <div className="card">
-        <div className="card__head"><div className="card__title"><Icon.BarChart size={14} /> 厨卫品类 价格带分布 · 奥维 2025Q4</div></div>
+        <div className="card__head">
+          <div className="card__title"><Icon.BarChart size={14} /> 厨卫品类 价格带分布 · 奥维 2025Q4</div>
+          {aoweiSkill && (
+            <button className="btn btn--primary btn--sm" onClick={() => setRunning(aoweiSkill)}>
+              <Icon.Sparkles size={12} /> 运行奥维数据分析
+            </button>
+          )}
+        </div>
         <div style={{ padding: 22 }}>
           <svg viewBox="0 0 600 220" style={{ width: "100%", height: 220 }}>
             {[
@@ -682,10 +743,12 @@ function MarketInsights() {
         </div>
       </div>
     </div>
+    {running && <RunDialog kind="skill" item={running} deptId={dept?.id} onClose={() => setRunning(null)} />}
+    </>
   );
 }
 
-function DeptSkills({ dept }) {
+function DeptSkills({ dept, setRoute }) {
   const list = SkillPacks.filter(s => s.dept === dept.id);
   const [running, setRunning] = useState(null);
   return (
@@ -694,7 +757,20 @@ function DeptSkills({ dept }) {
         <div style={{ fontSize: 12, color: "var(--fg3)" }}>
           <strong style={{ color: "var(--fg1)" }}>{dept.name}</strong> 拥有 <strong className="num" style={{ color: "var(--fg1)" }}>{list.length}</strong> 个 Skill Pack — 详细 CRUD 可在「技能中心」管理。
         </div>
-        <button className="btn btn--primary btn--sm"><Icon.Plus size={13} /> 新增 Skill</button>
+        <div className="row" style={{ gap: 8 }}>
+          {setRoute && (
+            <button className="btn btn--ghost btn--sm" onClick={() => setRoute({ page: "skills" })}>
+              <Icon.ArrowRight size={13} /> 打开技能中心
+            </button>
+          )}
+          <button
+            className="btn btn--primary btn--sm"
+            onClick={() => setRoute && setRoute({ page: "skills" })}
+            title={setRoute ? "跳到技能中心新建 — 那里有完整的 Skill Pack 编辑器" : "请前往技能中心创建"}
+          >
+            <Icon.Plus size={13} /> 新增 Skill
+          </button>
+        </div>
       </div>
       <div className="grid grid-cols-3">
         {list.map(s => (
