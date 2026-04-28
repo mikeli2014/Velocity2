@@ -51,15 +51,40 @@ function SkillCard({ s, dept, onEdit, onDelete, onRun }) {
   );
 }
 
-function SkillEditor({ skill: s, departments, onChange, onClose, onSave }) {
+// Mirror of `_skill_block()` in apps/api/velocity_api/routes/chat.py.
+// When the skill runs, this string is injected as a cached system block
+// just below the company / department blocks. Showing it live in the
+// editor demystifies what the skill "does" — there is no separately-
+// stored prompt template; this IS the skill's Claude-facing content.
+function buildSkillSystemBlock(s) {
+  const parts = [`当前技能:${s.name || "(未命名)"}(版本 ${s.version || "—"})。`];
+  if (s.input) parts.push(`期望输入:${s.input}。`);
+  if (s.output) parts.push(`期望输出:${s.output}。`);
+  parts.push("请按该技能的标准产出格式回答,先给结论再给依据,引用必要的知识来源。");
+  return parts.join(" ");
+}
+
+function SkillEditor({ skill: s, departments, onChange, onClose, onSave, onRunNow }) {
   function set(k, v) { onChange({ ...s, [k]: v }); }
   const valid = s.name.trim().length > 0 && (s.maintainer || "").trim().length > 0;
+  const [showPrompt, setShowPrompt] = useState(false);
   return (
     <Modal
       title={s.__isNew ? "新增 Skill Pack" : "编辑 Skill Pack"}
       onClose={onClose}
       foot={<>
         <button className="btn btn--ghost btn--sm" onClick={onClose}>取消</button>
+        {onRunNow && !s.__isNew && (
+          <button
+            className="btn btn--ghost btn--sm"
+            disabled={!valid}
+            onClick={() => onRunNow(s)}
+            style={!valid ? { opacity: 0.5, cursor: "not-allowed" } : {}}
+            title="保存当前编辑并立即打开运行对话框"
+          >
+            <Icon.PlayCircle size={13} /> 保存并立即运行
+          </button>
+        )}
         <button className="btn btn--primary btn--sm" disabled={!valid} onClick={onSave} style={!valid ? { opacity: 0.5, cursor: "not-allowed" } : {}}>
           <Icon.Save size={13} /> 保存
         </button>
@@ -126,6 +151,50 @@ function SkillEditor({ skill: s, departments, onChange, onClose, onSave }) {
           ))}
         </div>
       </div>
+
+      {/* Prompt 预览 — live preview of the system block that gets sent
+          to Claude when the skill runs. Mirrors _skill_block() server-side. */}
+      <div style={{ borderTop: "1px solid var(--border-soft)", marginTop: 8, paddingTop: 14 }}>
+        <button
+          type="button"
+          onClick={() => setShowPrompt(v => !v)}
+          style={{
+            width: "100%", textAlign: "left",
+            background: "transparent", border: "none", padding: 0,
+            cursor: "pointer", display: "flex", alignItems: "center", gap: 8
+          }}
+        >
+          <Icon.Sparkles size={13} style={{ color: "var(--vel-indigo)" }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--fg2)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Prompt 预览
+          </span>
+          <span style={{ fontSize: 11, color: "var(--fg3)" }}>
+            {showPrompt ? "(收起)" : "(查看 Claude 实际收到的系统提示)"}
+          </span>
+          <Icon.ArrowRight
+            size={11}
+            style={{ marginLeft: "auto", color: "var(--fg3)", transform: showPrompt ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}
+          />
+        </button>
+        {showPrompt && (
+          <>
+            <div style={{
+              marginTop: 10, padding: 14,
+              background: "#0B1220", color: "#E4E4E7",
+              borderRadius: 8, fontFamily: "var(--font-mono, monospace)",
+              fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap"
+            }}>
+              {buildSkillSystemBlock(s)}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--fg3)", marginTop: 8, lineHeight: 1.6 }}>
+              💡 这是 Claude 在 system prompt 中收到的「技能块」,会作为
+              ephemeral 缓存块拼在公司 / 部门块之后。再上方的公司事实和部门人设
+              块由后端自动注入,不在这里显示。运行时输入由用户在「立即运行」对话框
+              里填写,不属于该缓存块。
+            </div>
+          </>
+        )}
+      </div>
     </Modal>
   );
 }
@@ -162,14 +231,28 @@ export function SkillsPage() {
   };
 
   function save() {
+    saveSkill();
+    setEditing(null);
+  }
+
+  // Persist the current edit and return the saved row. Used by both
+  // the regular Save and the new "Save and Run" button — only the
+  // latter wants to keep state alive (open RunDialog instead of close).
+  function saveSkill() {
+    const next = { ...editing, updated: new Date().toISOString().slice(0, 10) };
+    delete next.__isNew;
     setList(prev => {
-      const i = prev.findIndex(x => x.id === editing.id);
-      const next = { ...editing, updated: new Date().toISOString().slice(0, 10) };
-      delete next.__isNew;
+      const i = prev.findIndex(x => x.id === next.id);
       if (i === -1) return [next, ...prev];
       const cp = prev.slice(); cp[i] = next; return cp;
     });
+    return next;
+  }
+
+  function saveAndRun() {
+    const saved = saveSkill();
     setEditing(null);
+    setRunning(saved);
   }
   function del() { setList(prev => prev.filter(x => x.id !== confirm.s.id)); setConfirm(null); }
   function onNew() {
@@ -267,6 +350,7 @@ export function SkillsPage() {
         <SkillEditor
           skill={editing} departments={Departments.filter(d => !d.parentId)}
           onChange={setEditing} onClose={() => setEditing(null)} onSave={save}
+          onRunNow={saveAndRun}
         />
       )}
       {confirm && (
