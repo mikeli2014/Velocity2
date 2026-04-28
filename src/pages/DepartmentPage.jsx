@@ -91,7 +91,7 @@ export function DepartmentPage({ deptId, setRoute }) {
       {tab === "skills" && <DeptSkills dept={dept} setRoute={setRoute} />}
       {tab === "workflows" && <DeptWorkflows dept={dept} />}
       {tab === "projects" && <DeptProjects dept={dept} />}
-      {tab === "assistant" && <AssistantChat dept={dept} />}
+      {tab === "assistant" && <AssistantChat dept={dept} setRoute={setRoute} />}
 
       {configuring && (
         <DepartmentConfigModal
@@ -836,34 +836,16 @@ function DeptWorkflows({ dept }) {
       </div>
     );
   }
-  const flows = [
-    { name: "创建设计简报", steps: 5, uses: 64, time: "约 8 分钟" },
-    { name: "材料方案对比", steps: 4, uses: 38, time: "约 5 分钟" },
-    { name: "CMF 可行性检查", steps: 6, uses: 27, time: "约 12 分钟" },
-    { name: "供应商 / 工艺评审", steps: 7, uses: 19, time: "约 18 分钟" },
-    { name: "竞品设计语言图谱", steps: 5, uses: 42, time: "约 10 分钟" },
-    { name: "概念评审备忘录", steps: 4, uses: 31, time: "约 6 分钟" }
-  ];
+  // No real workflows for this dept yet. Show a clean empty state
+  // instead of the legacy hardcoded card array (whose 启动 → buttons
+  // had no onClick).
   return (
-    <div className="grid grid-cols-2">
-      {flows.map((f, i) => (
-        <div key={i} className="card" style={{ padding: 18 }}>
-          <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
-            <Icon.Workflow size={16} style={{ color: "var(--vel-indigo)" }} />
-            <span className="pill pill--neutral">{f.steps} 步</span>
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)", marginBottom: 10 }}>{f.name}</div>
-          <div className="row" style={{ gap: 4, marginBottom: 12 }}>
-            {[...Array(f.steps)].map((_, si) => (
-              <div key={si} style={{ flex: 1, height: 4, borderRadius: 2, background: si < f.steps - 1 ? "var(--vel-indigo)" : "var(--slate-200)" }} />
-            ))}
-          </div>
-          <div className="row" style={{ justifyContent: "space-between", fontSize: 11, color: "var(--fg3)" }}>
-            <span>{f.uses} 次执行 · {f.time}</span>
-            <button className="btn btn--text btn--sm">启动 →</button>
-          </div>
-        </div>
-      ))}
+    <div className="card" style={{ padding: 36, textAlign: "center", color: "var(--fg4)", fontSize: 13 }}>
+      <Icon.Workflow size={28} style={{ color: "var(--fg4)", marginBottom: 10 }} />
+      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg1)", marginBottom: 6 }}>{dept.name} 暂无工作流模板</div>
+      <div style={{ fontSize: 12, color: "var(--fg3)", lineHeight: 1.6 }}>
+        在「工作流中心」新建模板后会自动出现在这里 —— 工作流可跨部门复用,模板触发后会进入运行历史。
+      </div>
     </div>
   );
 }
@@ -982,7 +964,7 @@ function updateAt(arr, i, fn) {
   return cp;
 }
 
-function AssistantChat({ dept }) {
+function AssistantChat({ dept, setRoute }) {
   const initial = [
     { role: "user", text: "PVD 工艺与喷涂在零冷水热水器外壳上,500台试产成本对比?" },
     {
@@ -1085,7 +1067,14 @@ function AssistantChat({ dept }) {
             <span>{dept.assistant} · {dept.name} 助手</span>
             <span className="pill pill--ok"><span className="dot dot--ok" style={{ marginRight: 4 }} />在线</span>
           </div>
-          <button className="btn btn--text btn--sm">新对话 +</button>
+          <button
+            className="btn btn--text btn--sm"
+            onClick={() => { setMsgs(initial); setDraft(""); setPending(false); }}
+            disabled={pending}
+            title="清空当前对话历史,回到初始问候"
+          >
+            新对话 +
+          </button>
         </div>
         <div className="scroll" style={{ flex: 1, padding: 22, overflow: "auto", display: "flex", flexDirection: "column", gap: 18 }}>
           {msgs.map((m, i) => (
@@ -1131,10 +1120,34 @@ function AssistantChat({ dept }) {
                 )}
                 {m.role === "assistant" && (
                   <div className="row" style={{ gap: 12, marginTop: 8, fontSize: 11, color: "var(--fg3)" }}>
-                    <button>👍 有用</button>
-                    <button>👎 不准确</button>
-                    <button>+ 补充知识</button>
-                    <button>↗ 写入项目</button>
+                    <button
+                      onClick={() => setMsgs(list => updateAt(list, i, x => ({ ...x, rating: x.rating === "up" ? null : "up" })))}
+                      style={{ color: m.rating === "up" ? "var(--success-text)" : undefined, fontWeight: m.rating === "up" ? 700 : undefined }}
+                      title="标记本次回复有用(本地记录;暂未发送到 LLMCall 反馈)"
+                    >
+                      👍 {m.rating === "up" ? "已点赞" : "有用"}
+                    </button>
+                    <button
+                      onClick={() => setMsgs(list => updateAt(list, i, x => ({ ...x, rating: x.rating === "down" ? null : "down" })))}
+                      style={{ color: m.rating === "down" ? "var(--danger-text)" : undefined, fontWeight: m.rating === "down" ? 700 : undefined }}
+                      title="标记本次回复不准确"
+                    >
+                      👎 {m.rating === "down" ? "已反馈" : "不准确"}
+                    </button>
+                    <button
+                      onClick={() => setRoute && setRoute({ page: "knowledge" })}
+                      title="跳转到公司知识中心补充知识源"
+                      disabled={!setRoute}
+                    >
+                      + 补充知识
+                    </button>
+                    <button
+                      onClick={() => setRoute && setRoute({ page: "okr" })}
+                      title="跳转到 OKR 与项目页面新建项目"
+                      disabled={!setRoute}
+                    >
+                      ↗ 写入项目
+                    </button>
                   </div>
                 )}
               </div>
@@ -1143,8 +1156,22 @@ function AssistantChat({ dept }) {
         </div>
         <div style={{ padding: 14, borderTop: "1px solid var(--border-soft)" }}>
           <div className="row" style={{ gap: 8, padding: "8px 12px", background: "var(--slate-50)", border: "1px solid var(--border)", borderRadius: 10 }}>
-            <button className="btn btn--icon btn--text"><Icon.Paperclip size={15} /></button>
-            <button className="btn btn--icon btn--text"><Icon.Image size={15} /></button>
+            <button
+              className="btn btn--icon btn--text"
+              disabled
+              title="附件:暂未支持(SDK 无文件附件 API,RAG 上线后接入)"
+              style={{ opacity: 0.4, cursor: "not-allowed" }}
+            >
+              <Icon.Paperclip size={15} />
+            </button>
+            <button
+              className="btn btn--icon btn--text"
+              disabled
+              title="图片:暂未支持(等 Anthropic vision 接入)"
+              style={{ opacity: 0.4, cursor: "not-allowed" }}
+            >
+              <Icon.Image size={15} />
+            </button>
             <input
               value={draft}
               onChange={e => setDraft(e.target.value)}
@@ -1153,7 +1180,14 @@ function AssistantChat({ dept }) {
               disabled={pending}
               style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 13, color: "var(--fg1)" }}
             />
-            <button className="btn btn--icon btn--text"><Icon.Mic size={15} /></button>
+            <button
+              className="btn btn--icon btn--text"
+              disabled
+              title="语音:暂未支持(浏览器 SpeechRecognition 接入待评估)"
+              style={{ opacity: 0.4, cursor: "not-allowed" }}
+            >
+              <Icon.Mic size={15} />
+            </button>
             <button
               className="btn btn--primary btn--sm"
               onClick={send}
